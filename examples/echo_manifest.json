@@ -1,0 +1,16 @@
+{
+  "manifest_version": "v1",
+  "agent_id": "example.echo",
+  "name": "Example Echo Agent",
+  "description": "Minimal local runtime agent for CLI lifecycle smoke tests.",
+  "version": "1.0.0",
+  "entrypoint": "agentfabric.cli:EchoAgent",
+  "capabilities": ["echo"],
+  "permissions": [],
+  "sandbox": {
+    "allow_network": false,
+    "allowed_filesystem_paths": []
+  },
+  "max_run_seconds": 30,
+  "max_tool_calls": 4
+}

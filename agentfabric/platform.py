@@ -1,5 +1,6 @@
-"""Top-level façade that composes phases 2-4 services."""
+"""Top-level façade that composes phases 1-4 services."""
 
+from agentfabric.phase1.runtime import AgentOrchestrator
 from agentfabric.phase2.auth import ApiKeyAuthService
 from agentfabric.phase2.billing import BillingService
 from agentfabric.phase2.registry import RegistryService
@@ -13,9 +14,10 @@ from agentfabric.phase4.sla import SlaCatalog
 
 
 class AgentFabricPlatform:
-    """Composed services for production phases 2-4."""
+    """Composed services for production phases 1-4."""
 
     def __init__(self) -> None:
+        self.runtime = AgentOrchestrator()
         self.auth = ApiKeyAuthService()
         self.registry = RegistryService()
         self.reviews = ReviewService()

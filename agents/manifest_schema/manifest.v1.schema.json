@@ -11,6 +11,10 @@
     "permissions"
   ],
   "properties": {
+    "agent_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "manifest_version": {
       "type": "string",
       "const": "v1"
@@ -33,6 +37,36 @@
         "type": "string"
       },
       "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "allow_network": {
+          "type": "boolean"
+        },
+        "allowed_filesystem_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "max_run_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "max_tool_calls": {
+      "type": "integer",
+      "minimum": 0
     },
     "metadata": {
       "type": "object"
