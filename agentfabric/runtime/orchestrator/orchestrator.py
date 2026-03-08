@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Union
 
 from agentfabric.runtime.manifest import Manifest
 
@@ -18,7 +18,10 @@ ToolCall = dict[str, Any]
 ToolResult = dict[str, Any]
 
 # Type alias for agent run: (request) -> response (sync or async)
-AgentRunner = Callable[[RunRequest], RunResponse] | Callable[[RunRequest], Awaitable[RunResponse]]
+AgentRunner = Union[
+    Callable[[RunRequest], RunResponse],
+    Callable[[RunRequest], Awaitable[RunResponse]],
+]
 
 
 class Orchestrator:

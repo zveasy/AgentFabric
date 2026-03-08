@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import shutil
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from agentfabric.server.auth import AuthService, require_scopes
@@ -28,8 +30,12 @@ from agentfabric.server.schemas import (
     RegisterPrincipalRequest,
     RotateTokenRequest,
     TokenResponse,
+    SubmitReviewRequest,
+    ReviewSummaryResponse,
+    WorkflowRunRequest,
+    AssignRoleRequest,
 )
-from agentfabric.server.services import AuditService, BillingService, PackageService, QueueService
+from agentfabric.server.services import AuditService, BillingService, PackageService, QueueService, ReviewService
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
 
 
@@ -48,7 +54,7 @@ def choose_signing_verifier():
     return DigestFallbackVerifier()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Optional[Settings] = None) -> FastAPI:
     settings = settings or get_settings()
     session_factory, engine = build_session_factory(settings)
     Base.metadata.create_all(bind=engine)
@@ -82,7 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
         if request.url.path in {
+            "/",
             "/health",
+            "/ready",
+            "/favicon.ico",
             "/auth/principals/register",
             "/auth/token/issue",
             "/openapi.json",
@@ -102,6 +111,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health():
         return HealthResponse()
 
+    @app.get("/ready", tags=["system"])
+    def ready(db: Session = Depends(get_db)):
+        try:
+            db.execute(text("SELECT 1"))
+        except Exception:
+            raise HTTPException(status_code=503, detail="database unavailable")
+        if settings.redis_url.startswith("redis://"):
+            try:
+                import redis
+                r = redis.from_url(settings.redis_url)
+                r.ping()
+            except Exception:
+                raise HTTPException(status_code=503, detail="redis unavailable")
+        return {"status": "ready"}
+
+    @app.get("/", tags=["system"])
+    def root():
+        return {
+            "service": "AgentFabric",
+            "message": "API is running. Open /docs for interactive API documentation.",
+            "docs": "/docs",
+            "health": "/health",
+            "openapi": "/openapi.json",
+        }
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        from fastapi.responses import Response
+        return Response(status_code=204)
+
     @app.post("/auth/principals/register", tags=["auth"])
     def register_principal(payload: RegisterPrincipalRequest, db: Session = Depends(get_db)):
         principal = auth.register_principal(
@@ -110,8 +149,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             tenant_id=payload.tenant_id,
             principal_type=payload.principal_type,
             scopes=payload.scopes,
+            role=payload.role,
         )
-        return {"principal_id": principal.principal_id, "tenant_id": principal.tenant_id}
+        return {"principal_id": principal.principal_id, "tenant_id": principal.tenant_id, "role": principal.role}
 
     @app.post("/auth/token/issue", response_model=TokenResponse, tags=["auth"])
     def issue_token(payload: IssueTokenRequest, db: Session = Depends(get_db)):
@@ -150,14 +190,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/registry/list", response_model=ListPackagesResponse, tags=["registry"])
     def list_packages(
         request: Request,
-        query: str | None = None,
-        category: str | None = None,
-        permission: list[str] | None = None,
+        query: Optional[str] = None,
+        category: Optional[str] = None,
+        permission: Optional[list[str]] = None,
         page: int = 1,
         page_size: int = 20,
+        private_only: bool = False,
         db: Session = Depends(get_db),
     ):
         require_scopes(request, ["registry.read"])
+        namespace_filter = None
+        if private_only:
+            require_scopes(request, ["registry.read_private"])
+            namespace_filter = getattr(request.state.principal, "tenant_id", None)
         service = PackageService(db, signing_verifier=signing_verifier)
         result = service.list_packages(
             query=query,
@@ -165,6 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             required_permissions=set(permission or []),
             page=page,
             page_size=page_size,
+            namespace_filter=namespace_filter,
         )
         return ListPackagesResponse(**result)
 
@@ -180,6 +226,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             version=payload.version,
         )
         return {"id": install.id, "package_fqid": install.package_fqid}
+
+    @app.get("/registry/packages/{fqid}/reviews/summary", response_model=ReviewSummaryResponse, tags=["registry"])
+    def get_review_summary(fqid: str, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["registry.read"])
+        review_svc = ReviewService(db)
+        return ReviewSummaryResponse(**review_svc.get_summary(fqid))
+
+    @app.get("/registry/packages/{fqid}/reviews", tags=["registry"])
+    def list_reviews(fqid: str, page: int = 1, page_size: int = 20, request: Request = None, db: Session = Depends(get_db)):
+        require_scopes(request, ["registry.read"])
+        review_svc = ReviewService(db)
+        return review_svc.list_reviews(fqid, page=page, page_size=page_size)
+
+    @app.post("/registry/packages/{fqid}/reviews", tags=["registry"])
+    def submit_review(fqid: str, payload: SubmitReviewRequest, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["registry.read"], tenant_id=payload.tenant_id)
+        review_svc = ReviewService(db)
+        review_svc.submit(tenant_id=payload.tenant_id, user_id=payload.user_id, package_fqid=fqid, stars=payload.stars, review_text=payload.review_text)
+        return {"status": "created"}
 
     @app.post("/billing/events", tags=["billing"])
     def record_billing_event(payload: BillingEventRequest, request: Request, db: Session = Depends(get_db)):
@@ -221,7 +286,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             created_at=item.created_at,
         )
 
-    @app.post("/queue/dequeue", response_model=QueueMessageResponse | None, tags=["queue"])
+    @app.post("/queue/dequeue", response_model=Optional[QueueMessageResponse], tags=["queue"])
     def dequeue_job(queue_name: str, request: Request, db: Session = Depends(get_db)):
         require_scopes(request, ["queue.read"])
         service = QueueService(db, backend=queue_backend)
@@ -238,9 +303,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.post("/audit/append", tags=["audit"])
-    def append_audit(actor_id: str, action: str, target: str, metadata: dict | None, request: Request, db: Session = Depends(get_db)):
+    def append_audit(actor_id: str, action: str, target: str, metadata: Optional[dict], request: Request, db: Session = Depends(get_db)):
         require_scopes(request, ["audit.write"])
         service = AuditService(db)
         return service.append(actor_id=actor_id, action=action, target=target, metadata=metadata)
+
+    @app.get("/audit/export", tags=["audit"])
+    def export_audit(since_id: int = 0, limit: int = 1000, request: Request = None, db: Session = Depends(get_db)):
+        require_scopes(request, ["audit.export"])
+        from agentfabric.server.models import AuditEvent
+        stmt = select(AuditEvent).where(AuditEvent.id > since_id).order_by(AuditEvent.id).limit(limit)
+        rows = db.execute(stmt).scalars().all()
+        return {"events": [{"id": r.id, "actor_id": r.actor_id, "action": r.action, "target": r.target, "metadata": r.metadata_json, "event_hash": r.event_hash, "created_at": r.created_at.isoformat()} for r in rows]}
+
+    @app.post("/workflows/run", tags=["workflows"])
+    def run_workflow(payload: WorkflowRunRequest, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["runtime.run"])
+        from agentfabric.phase3.workflow import WorkflowEngine, WorkflowNode
+        nodes = [WorkflowNode(node_id=n["node_id"], agent_name=n["agent_name"], dependencies=tuple(n.get("dependencies", [])), max_retries=n.get("max_retries", 0), timeout_seconds=n.get("timeout_seconds", 30.0)) for n in payload.nodes]
+        engine = WorkflowEngine()
+        def stub_runner(node, node_input):
+            return {"node_id": node.node_id, "context": node_input.get("context", {})}
+        result = engine.run(workflow_id=payload.workflow_id, idempotency_key=payload.idempotency_key, nodes=nodes, initial_payload=payload.initial_payload, node_runner=stub_runner)
+        return result
+
+    @app.post("/admin/principals/{principal_id}/role", tags=["admin"])
+    def assign_role(principal_id: str, payload: AssignRoleRequest, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["rbac.assign_role"])
+        from agentfabric.server.models import Principal
+        from agentfabric.phase4.rbac import RbacService
+        if payload.role not in RbacService.ROLE_PERMISSIONS:
+            raise HTTPException(status_code=400, detail=f"unknown role: {payload.role}")
+        principal = db.get(Principal, principal_id)
+        if not principal:
+            raise HTTPException(status_code=404, detail="principal not found")
+        principal.role = payload.role
+        db.add(principal)
+        db.flush()
+        return {"principal_id": principal_id, "role": payload.role}
 
     return app

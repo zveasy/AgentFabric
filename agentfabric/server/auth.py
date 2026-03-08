@@ -42,12 +42,16 @@ class AuthService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def register_principal(self, db: Session, *, principal_id: str, tenant_id: str, principal_type: str, scopes: list[str]) -> Principal:
+    def register_principal(self, db: Session, *, principal_id: str, tenant_id: str, principal_type: str, scopes: list[str], role: str = "viewer") -> Principal:
+        from agentfabric.phase4.rbac import RbacService
+        role_perms = set(RbacService.ROLE_PERMISSIONS.get(role, []))
+        effective_scopes = sorted(set(scopes) | role_perms)
         existing = db.get(Principal, principal_id)
         if existing:
             existing.tenant_id = tenant_id
             existing.principal_type = principal_type
-            existing.scopes_csv = ",".join(sorted(set(scopes)))
+            existing.role = role
+            existing.scopes_csv = ",".join(effective_scopes)
             db.add(existing)
             db.flush()
             return existing
@@ -55,22 +59,27 @@ class AuthService:
             principal_id=principal_id,
             tenant_id=tenant_id,
             principal_type=principal_type,
-            scopes_csv=",".join(sorted(set(scopes))),
+            role=role,
+            scopes_csv=",".join(effective_scopes),
         )
         db.add(principal)
         db.flush()
         return principal
 
     def issue_token(self, db: Session, *, principal_id: str, ttl_seconds: int) -> tuple[str, int]:
+        from agentfabric.phase4.rbac import RbacService
         principal = db.get(Principal, principal_id)
         if principal is None:
             raise HTTPException(status_code=404, detail="principal not found")
+        role_perms = set(RbacService.ROLE_PERMISSIONS.get(principal.role, []))
+        stored_scopes = set(principal.scopes_csv.split(",")) if principal.scopes_csv else set()
+        effective_scopes = sorted(stored_scopes | role_perms)
         token_id = uuid4().hex
         expires_at = utc_now() + timedelta(seconds=ttl_seconds)
         claims = {
             "sub": principal.principal_id,
             "tid": principal.tenant_id,
-            "scp": principal.scopes_csv.split(",") if principal.scopes_csv else [],
+            "scp": effective_scopes,
             "pty": principal.principal_type,
             "jti": token_id,
             "exp": int(expires_at.timestamp()),

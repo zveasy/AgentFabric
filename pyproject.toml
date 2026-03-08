@@ -7,7 +7,7 @@ name = "agentfabric"
 version = "0.2.0"
 description = "AgentFabric production scaffolding for phases 1-4"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [{ name = "AgentFabric Team" }]
 license = { text = "MIT" }
 dependencies = [
@@ -17,16 +17,15 @@ dependencies = [
     "prometheus-client>=0.19",
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
-    "fastapi>=0.135.0",
-    "uvicorn>=0.41.0",
-    "sqlalchemy>=2.0.48",
-    "alembic>=1.18.0",
-    "psycopg[binary]>=3.3.0",
-    "pydantic-settings>=2.13.0",
-    "redis>=7.2.0",
+    "fastapi>=0.100,<0.129",
+    "uvicorn>=0.20",
+    "sqlalchemy>=2.0",
+    "alembic>=1.10",
+    "pydantic-settings>=2.0",
+    "redis>=4.0",
     "pyjwt>=2.7.0",
-    "stripe>=14.4.0",
-    "httpx>=0.28.0",
+    "stripe>=5.0",
+    "httpx>=0.24",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +45,7 @@ include = ["agentfabric*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py39"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

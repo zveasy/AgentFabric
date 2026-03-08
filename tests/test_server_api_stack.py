@@ -18,7 +18,7 @@ class ServerApiStackTests(unittest.TestCase):
         settings = Settings(
             database_url=f"sqlite:///{db_path}",
             redis_url="redis://127.0.0.1:6399/9",  # force fallback to in-memory queue
-            jwt_secret="test-secret",
+            jwt_secret="test-secret-at-least-32-characters-long-for-hmac",
             stripe_api_key=None,
         )
         self.client = TestClient(create_app(settings))

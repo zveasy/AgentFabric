@@ -21,6 +21,7 @@ class Principal(Base):
     principal_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     principal_type: Mapped[str] = mapped_column(String(32), default="user")
+    role: Mapped[str] = mapped_column(String(32), default="viewer", index=True)
     scopes_csv: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -127,4 +128,17 @@ class PaymentRecord(Base):
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="USD")
     idempotency_key: Mapped[str] = mapped_column(String(256), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class PackageReview(Base):
+    __tablename__ = "package_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    package_fqid: Mapped[str] = mapped_column(String(512), index=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    review_text: Mapped[str] = mapped_column(Text, default="")
+    moderated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)

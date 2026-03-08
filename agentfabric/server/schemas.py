@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,7 @@ class RegisterPrincipalRequest(BaseModel):
     principal_id: str
     tenant_id: str
     principal_type: str = "user"
+    role: str = "viewer"
     scopes: list[str] = Field(default_factory=list)
 
 
@@ -63,7 +65,7 @@ class InstallPackageRequest(BaseModel):
     user_id: str
     namespace: str
     package_id: str
-    version: str | None = None
+    version: Optional[str] = None
 
 
 class BillingEventRequest(BaseModel):
@@ -92,3 +94,26 @@ class QueueMessageResponse(BaseModel):
     payload: dict
     attempts: int
     created_at: datetime
+
+
+class SubmitReviewRequest(BaseModel):
+    tenant_id: str
+    user_id: str
+    stars: int
+    review_text: str = ""
+
+
+class ReviewSummaryResponse(BaseModel):
+    count: int
+    avg_stars: float
+
+
+class WorkflowRunRequest(BaseModel):
+    workflow_id: str
+    idempotency_key: str
+    nodes: list[dict]
+    initial_payload: dict = Field(default_factory=dict)
+
+
+class AssignRoleRequest(BaseModel):
+    role: str

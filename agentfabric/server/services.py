@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agentfabric.errors import ConflictError, NotFoundError, ValidationError
-from agentfabric.server.models import AuditEvent, BillingEvent, Install, InvoiceLine, Package, PaymentRecord
+from agentfabric.server.models import AuditEvent, BillingEvent, Install, InvoiceLine, Package, PackageReview, PaymentRecord
 from agentfabric.server.payments import MockPaymentProcessor, PaymentProcessor
 from agentfabric.server.queue import QueueBackend, QueueItem, SqlQueueStore
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
@@ -81,6 +81,7 @@ class PackageService:
         required_permissions: set[str] | None = None,
         page: int = 1,
         page_size: int = 20,
+        namespace_filter: str | None = None,
     ) -> dict:
         subq = (
             select(
@@ -104,6 +105,8 @@ class PackageService:
         rows = self.db.execute(stmt).scalars().all()
         filtered = []
         for item in rows:
+            if namespace_filter and item.namespace != namespace_filter:
+                continue
             if query and query.lower() not in item.package_id.lower():
                 continue
             if category and item.category != category:
@@ -254,3 +257,50 @@ class AuditService:
         self.db.add(event)
         self.db.flush()
         return {"previous_hash": previous_hash, "event_hash": event_hash}
+
+
+class ReviewService:
+    BANNED_TERMS = {"malware", "phishing", "scam"}
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def submit(self, *, tenant_id: str, user_id: str, package_fqid: str, stars: int, review_text: str) -> PackageReview:
+        if stars < 1 or stars > 5:
+            raise ValidationError("stars must be between 1 and 5")
+        lowered = review_text.lower()
+        if any(term in lowered for term in self.BANNED_TERMS):
+            raise ValidationError("review rejected by moderation policy")
+        row = PackageReview(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            package_fqid=package_fqid,
+            stars=stars,
+            review_text=review_text,
+        )
+        self.db.add(row)
+        self.db.flush()
+        return row
+
+    def list_reviews(self, package_fqid: str, page: int = 1, page_size: int = 20) -> dict:
+        stmt = select(PackageReview).where(PackageReview.package_fqid == package_fqid).order_by(PackageReview.created_at.desc())
+        total = self.db.execute(select(func.count()).select_from(PackageReview).where(PackageReview.package_fqid == package_fqid)).scalar() or 0
+        items = self.db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+        return {
+            "items": [
+                {"id": r.id, "tenant_id": r.tenant_id, "user_id": r.user_id, "stars": r.stars, "review_text": r.review_text, "created_at": r.created_at.isoformat()}
+                for r in items
+            ],
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": max(1, (total + page_size - 1) // page_size),
+        }
+
+    def get_summary(self, package_fqid: str) -> dict:
+        row = self.db.execute(
+            select(func.count(PackageReview.id).label("count"), func.avg(PackageReview.stars).label("avg_stars")).where(PackageReview.package_fqid == package_fqid)
+        ).one_or_none()
+        if not row or row.count == 0:
+            return {"count": 0, "avg_stars": 0.0}
+        return {"count": row.count, "avg_stars": round(float(row.avg_stars), 2)}

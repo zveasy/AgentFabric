@@ -6,7 +6,7 @@ permissions and returns results in the protocol format.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Callable, Awaitable
+from typing import Any, Callable, Awaitable, Union, Optional
 
 from agentfabric.runtime.manifest import Manifest
 
@@ -15,8 +15,9 @@ ToolCall = dict[str, Any]
 ToolResult = dict[str, Any]
 
 # (tool_name, arguments) -> result data or raise
-ToolExecutor = Callable[[str, dict[str, Any]], Any] | Callable[
-    [str, dict[str, Any]], Awaitable[Any]
+ToolExecutor = Union[
+    Callable[[str, dict[str, Any]], Any],
+    Callable[[str, dict[str, Any]], Awaitable[Any]],
 ]
 
 
@@ -39,7 +40,7 @@ class ToolRouter:
             return True
         return False
 
-    def can_execute(self, manifest: Manifest, tool_name: str) -> tuple[bool, str | None]:
+    def can_execute(self, manifest: Manifest, tool_name: str) -> tuple[bool, Optional[str]]:
         """
         Return (allowed, error_message). If allowed is False, error_message explains why.
         """
@@ -93,8 +94,8 @@ def _tool_result(
     request_id: str,
     success: bool,
     data: Any,
-    error_code: str | None,
-    error_message: str | None,
+    error_code: Optional[str],
+    error_message: Optional[str],
 ) -> ToolResult:
     return {
         "type": "tool_result",

@@ -102,7 +102,7 @@ def _build_parser() -> argparse.ArgumentParser:
     api_run = sub.add_parser("api-run", help="run FastAPI server")
     api_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
     api_run.add_argument("--redis-url", default="redis://localhost:6379/0")
-    api_run.add_argument("--jwt-secret", default="change-me-in-production")
+    api_run.add_argument("--jwt-secret", default="change-me-in-production-use-at-least-32-chars")
     api_run.add_argument("--stripe-api-key")
     api_run.add_argument("--host", default="127.0.0.1")
     api_run.add_argument("--port", type=int, default=8000)
