@@ -18,12 +18,27 @@ The primary source of truth in this branch is the newer production server stack:
 - **Phase 2 (Marketplace)**: registry publish/list/install flows, discovery filters, ratings/moderation hooks, metering, and tenant-scoped controls.
 - **Phase 3 (Collaboration)**: delegation protocol, policy checks, workflow DAG execution, retry/idempotency support, and trace metadata propagation.
 - **Phase 4 (Enterprise)**: RBAC, immutable audit chain, private namespaces, and SLA/support controls.
+- **Phase 5 (AgentForge Projects)**: depth-first agent projects with maintainers, contribution zones, automated evaluation gates, merge governance, and release channels.
 
 ## Production hardening (P0/P1/P2)
 
 - **P0**: durable persistence layer, auth/token lifecycle, migration-driven schema management, and service endpoints.
 - **P1**: package security pipeline, stronger sandbox policies, metrics/traces, backup/restore, and retry worker support.
 - **P2**: moderation queue + resolution, billing settlement pathways, GDPR flows, SIEM export, and legal document lifecycle.
+
+## AgentForge depth-first model
+
+AgentFabric now supports **Agent Projects**: maintained, versioned intelligence assets rather than disposable one-off agents.
+
+Each project includes:
+
+- Canonical `main` branch and contributor branches.
+- Maintainers and merge governance.
+- Contribution manifests with measurable improvement data.
+- Automated evaluation gates for quality/regression checks.
+- Release channels: `stable`, `beta`, `nightly`, `enterprise-certified`.
+
+Meaningful merges are enforced by policy: contributions must show measurable upside (for example accuracy/reliability/domain coverage) without unacceptable latency/cost/safety regressions.
 
 ## Repository layout
 

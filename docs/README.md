@@ -19,3 +19,10 @@ The FastAPI server (`agentfabric.server`) provides:
 - **Audit:** `POST /audit/append`, `GET /audit/export` (SIEM-style; requires `audit.export`)
 - **Workflows (Phase 3):** `POST /workflows/run` (DAG with idempotency)
 - **Admin (Phase 4):** `POST /admin/principals/{id}/role` (RBAC; requires `rbac.assign_role`)
+- **Agent Projects (AgentForge):**
+  - `POST /projects`, `GET /projects`, `GET /projects/{namespace}/{project_id}`
+  - `POST /projects/{namespace}/{project_id}/maintainers`, `POST /projects/{namespace}/{project_id}/branches`
+  - `POST /projects/{namespace}/{project_id}/contributions`
+  - `POST /projects/{namespace}/{project_id}/contributions/{id}/evaluate`
+  - `POST /projects/{namespace}/{project_id}/contributions/{id}/review`
+  - `GET /projects/{namespace}/{project_id}/releases`
