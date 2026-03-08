@@ -6,16 +6,23 @@ import argparse
 import base64
 import importlib
 import json
+import os
 from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 from typing import Any
+
+from alembic import command
+from alembic.config import Config
+import uvicorn
 
 from agentfabric.phase1.sdk import Agent
 from agentfabric.phase2.models import MeterEvent, PackageUpload
 from agentfabric.platform import AgentFabricPlatform
 from agentfabric.production.api import ProductionApiServer
 from agentfabric.production.control_plane import ProductionControlPlane
+from agentfabric.server.app import create_app
+from agentfabric.server.config import Settings
 
 STATE_FILE = Path(".agentfabric_runtime_state.json")
 
@@ -88,6 +95,23 @@ def _build_parser() -> argparse.ArgumentParser:
     prod_api.add_argument("--db-path", default="agentfabric.db")
     prod_api.add_argument("--host", default="127.0.0.1")
     prod_api.add_argument("--port", type=int, default=8080)
+
+    db_migrate = sub.add_parser("db-migrate", help="apply alembic migrations to database")
+    db_migrate.add_argument("--database-url", required=True)
+
+    api_run = sub.add_parser("api-run", help="run FastAPI server")
+    api_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
+    api_run.add_argument("--redis-url", default="redis://localhost:6379/0")
+    api_run.add_argument("--jwt-secret", default="change-me-in-production")
+    api_run.add_argument("--stripe-api-key")
+    api_run.add_argument("--host", default="127.0.0.1")
+    api_run.add_argument("--port", type=int, default=8000)
+
+    worker_run = sub.add_parser("worker-run", help="run queue worker")
+    worker_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
+    worker_run.add_argument("--redis-url", default="redis://localhost:6379/0")
+    worker_run.add_argument("--queue-name", default="default")
+    worker_run.add_argument("--poll-interval-seconds", type=float, default=0.5)
     return parser
 
 
@@ -307,6 +331,37 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prod-api":
         cp = ProductionControlPlane(db_path=args.db_path)
         ProductionApiServer(cp).run(host=args.host, port=args.port)
+        return 0
+
+    if args.command == "db-migrate":
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", args.database_url)
+        command.upgrade(alembic_cfg, "head")
+        print(json.dumps({"status": "ok", "database_url": args.database_url}))
+        return 0
+
+    if args.command == "api-run":
+        os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
+        os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
+        os.environ["AGENTFABRIC_JWT_SECRET"] = args.jwt_secret
+        if args.stripe_api_key:
+            os.environ["AGENTFABRIC_STRIPE_API_KEY"] = args.stripe_api_key
+        settings = Settings()
+        app = create_app(settings)
+        uvicorn.run(app, host=args.host, port=args.port)
+        return 0
+
+    if args.command == "worker-run":
+        from agentfabric.server.worker import run_worker
+
+        os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
+        os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
+        settings = Settings()
+        run_worker(
+            settings=settings,
+            queue_name=args.queue_name,
+            poll_interval_seconds=args.poll_interval_seconds,
+        )
         return 0
 
     return 1

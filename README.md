@@ -2,6 +2,13 @@
 
 Production-oriented scaffolding for AgentFabric phases 1-4.
 
+This repository now includes execution-order production upgrades:
+
+- **(A)** Postgres-ready SQLAlchemy models + Alembic migrations + queue abstraction (Redis + in-memory fallback).
+- **(B)** FastAPI service with JWT auth middleware and OpenAPI documentation.
+- **(C)** Real integration adapters for signing (`cosign verify-blob`) and payments (Stripe `PaymentIntent`), with deterministic fallbacks for local tests.
+- **(D)** CI/CD workflows, Docker image build, and Kubernetes manifests for API/worker/Postgres/Redis deployment.
+
 ## What is implemented
 
 This repository now includes concrete, runnable implementations for all phases:
@@ -71,6 +78,44 @@ Run the CLI:
 Run production API:
 
 `python -m agentfabric.cli prod-api --db-path agentfabric.db --host 127.0.0.1 --port 8080`
+
+## New production server stack
+
+Apply schema migrations:
+
+`python -m agentfabric.cli db-migrate --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric"`
+
+Run FastAPI API service:
+
+`python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --host 0.0.0.0 --port 8000`
+
+Run queue worker:
+
+`python -m agentfabric.cli worker-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --queue-name default`
+
+## Local infrastructure
+
+Bring up local Postgres + Redis + API + worker:
+
+`docker compose up --build`
+
+## Deployment artifacts
+
+- GitHub Actions:
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/cd.yml`
+- Docker:
+  - `Dockerfile`
+  - `docker-compose.yml`
+- Kubernetes manifests:
+  - `deploy/k8s/namespace.yaml`
+  - `deploy/k8s/configmap.yaml`
+  - `deploy/k8s/secret.example.yaml`
+  - `deploy/k8s/postgres-statefulset.yaml`
+  - `deploy/k8s/redis-deployment.yaml`
+  - `deploy/k8s/api-deployment.yaml`
+  - `deploy/k8s/api-service.yaml`
+  - `deploy/k8s/worker-deployment.yaml`
 
 ## Runtime CLI lifecycle (Phase 1)
 
