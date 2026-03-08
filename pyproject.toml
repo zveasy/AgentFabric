@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentfabric"
+version = "0.1.0"
+description = "Universal marketplace and runtime for AI agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "AgentFabric" }]
+dependencies = [
+    "jsonschema>=4.0",
+    "pyyaml>=6.0",
+    "structlog>=24.0",
+    "prometheus-client>=0.19",
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+agentfabric = "agentfabric.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agentfabric*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"

@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agentfabric.dev/schemas/manifest/v1.json",
+  "title": "AgentFabric Agent Manifest",
+  "description": "Schema for AgentFabric agent manifest (v1). Defines capabilities, permissions, and metadata for installable agents.",
+  "type": "object",
+  "required": ["name", "version", "description"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique agent identifier (snake_case). Used for install path and routing.",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "examples": ["financial_analysis_agent", "research_agent"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the agent (e.g. 1.0, 1.2.3).",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$",
+      "examples": ["1.0", "2.1.0-beta"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the agent's purpose and capabilities."
+    },
+    "manifest_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Manifest schema version for compatibility."
+    },
+    "permissions": {
+      "type": "array",
+      "description": "List of permission scopes the agent may use. Runtime denies any tool or resource not listed.",
+      "items": { "type": "string" },
+      "examples": [["read_market_data", "write_reports"]]
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Declared input names or shapes (semantic; validation is implementation-specific).",
+      "items": { "type": "string" }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Declared output names or shapes (semantic; validation is implementation-specific).",
+      "items": { "type": "string" }
+    },
+    "tools": {
+      "type": "array",
+      "description": "Tool names the agent may invoke. Must be a subset of or covered by permissions.",
+      "items": { "type": "string" },
+      "examples": [["pandas", "numpy", "market_api"]]
+    },
+    "entrypoint": {
+      "type": "string",
+      "description": "Optional entrypoint module or command (e.g. agent.run or main:run).",
+      "examples": ["agent:run", "main:run"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Marketplace category for discovery.",
+      "examples": ["Finance", "DevOps", "Research"]
+    },
+    "author": {
+      "type": "string",
+      "description": "Agent author or organization."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier or custom license name."
+    }
+  }
+}
