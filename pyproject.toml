@@ -12,4 +12,4 @@ authors = [{ name = "AgentFabric Team" }]
 license = { text = "MIT" }
 
 [tool.setuptools]
-packages = ["agentfabric", "agentfabric.phase1", "agentfabric.phase2", "agentfabric.phase3", "agentfabric.phase4"]
+packages = ["agentfabric", "agentfabric.phase1", "agentfabric.phase2", "agentfabric.phase3", "agentfabric.phase4", "agentfabric.production"]

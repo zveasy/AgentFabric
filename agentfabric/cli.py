@@ -14,6 +14,8 @@ from typing import Any
 from agentfabric.phase1.sdk import Agent
 from agentfabric.phase2.models import MeterEvent, PackageUpload
 from agentfabric.platform import AgentFabricPlatform
+from agentfabric.production.api import ProductionApiServer
+from agentfabric.production.control_plane import ProductionControlPlane
 
 STATE_FILE = Path(".agentfabric_runtime_state.json")
 
@@ -69,6 +71,23 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--actor", required=True)
     run.add_argument("--fqid", required=True)
     run.add_argument("--idempotency-key", required=True)
+
+    prod_seed = sub.add_parser("prod-seed-principal", help="register production principal with scopes")
+    prod_seed.add_argument("--db-path", default="agentfabric.db")
+    prod_seed.add_argument("--principal", required=True)
+    prod_seed.add_argument("--tenant", required=True)
+    prod_seed.add_argument("--principal-type", default="user")
+    prod_seed.add_argument("--scopes", nargs="*", default=[])
+
+    prod_token = sub.add_parser("prod-issue-token", help="issue token for production principal")
+    prod_token.add_argument("--db-path", default="agentfabric.db")
+    prod_token.add_argument("--principal", required=True)
+    prod_token.add_argument("--ttl-seconds", type=int, default=3600)
+
+    prod_api = sub.add_parser("prod-api", help="run production HTTP API server")
+    prod_api.add_argument("--db-path", default="agentfabric.db")
+    prod_api.add_argument("--host", default="127.0.0.1")
+    prod_api.add_argument("--port", type=int, default=8080)
     return parser
 
 
@@ -266,6 +285,28 @@ def main(argv: list[str] | None = None) -> int:
         )
         platform.billing.process_queue()
         print(json.dumps(platform.billing.build_invoice(args.tenant)))
+        return 0
+
+    if args.command == "prod-seed-principal":
+        cp = ProductionControlPlane(db_path=args.db_path)
+        cp.auth.register_principal(
+            principal_id=args.principal,
+            tenant_id=args.tenant,
+            principal_type=args.principal_type,
+            scopes=list(args.scopes),
+        )
+        print(json.dumps({"status": "ok", "principal_id": args.principal}))
+        return 0
+
+    if args.command == "prod-issue-token":
+        cp = ProductionControlPlane(db_path=args.db_path)
+        token = cp.auth.issue_token(args.principal, ttl_seconds=args.ttl_seconds)
+        print(json.dumps({"token": token}))
+        return 0
+
+    if args.command == "prod-api":
+        cp = ProductionControlPlane(db_path=args.db_path)
+        ProductionApiServer(cp).run(host=args.host, port=args.port)
         return 0
 
     return 1

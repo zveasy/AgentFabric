@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from time import monotonic
 from typing import Any, Callable
 
+from agentfabric.errors import NotFoundError
 from agentfabric.phase1.manifest import AgentManifest
 from agentfabric.phase1.protocol import ProtocolEnvelope
 from agentfabric.phase1.security import PermissionEnforcer
@@ -32,6 +33,8 @@ class ToolRouter:
         self._tools[name] = RegisteredTool(name=name, required_permission=required_permission, handler=handler)
 
     def invoke(self, manifest: AgentManifest, tool_name: str, args: dict[str, Any], correlation_id: str) -> ProtocolEnvelope:
+        if tool_name not in self._tools:
+            raise NotFoundError(f"tool not found: {tool_name}")
         tool = self._tools[tool_name]
         self._permission_enforcer.check(manifest, tool.required_permission)
         start = monotonic()

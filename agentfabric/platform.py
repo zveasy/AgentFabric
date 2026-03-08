@@ -11,6 +11,7 @@ from agentfabric.phase4.audit import ImmutableAuditLog
 from agentfabric.phase4.marketplace import PrivateMarketplaceService
 from agentfabric.phase4.rbac import RbacService
 from agentfabric.phase4.sla import SlaCatalog
+from agentfabric.production.control_plane import ProductionControlPlane
 
 
 class AgentFabricPlatform:
@@ -28,3 +29,4 @@ class AgentFabricPlatform:
         self.audit = ImmutableAuditLog()
         self.private_marketplaces = PrivateMarketplaceService()
         self.sla_catalog = SlaCatalog()
+        self.production = ProductionControlPlane(db_path="agentfabric.db")
