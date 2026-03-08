@@ -1,0 +1,31 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build image
+        run: |
+          docker build -t ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }} .
+      - name: Push image
+        if: ${{ secrets.GHCR_TOKEN != '' }}
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }}

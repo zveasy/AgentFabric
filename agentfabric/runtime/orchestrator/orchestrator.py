@@ -106,9 +106,12 @@ class Orchestrator:
                 )
             else:
                 loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: runner(run_request),
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: runner(run_request),
+                    ),
+                    timeout=timeout,
                 )
             if asyncio.iscoroutine(response):
                 response = await asyncio.wait_for(response, timeout=timeout)

@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agentfabric
+      POSTGRES_USER: agentfabric
+      POSTGRES_PASSWORD: agentfabric
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres:5432/agentfabric
+      AGENTFABRIC_REDIS_URL: redis://redis:6379/0
+      AGENTFABRIC_JWT_SECRET: change-me
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python -m agentfabric.cli db-migrate --database-url $$AGENTFABRIC_DATABASE_URL &&
+             python -m agentfabric.cli api-run --database-url $$AGENTFABRIC_DATABASE_URL --redis-url $$AGENTFABRIC_REDIS_URL --jwt-secret $$AGENTFABRIC_JWT_SECRET --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres:5432/agentfabric
+      AGENTFABRIC_REDIS_URL: redis://redis:6379/0
+    command: >
+      python -m agentfabric.cli worker-run --database-url $$AGENTFABRIC_DATABASE_URL --redis-url $$AGENTFABRIC_REDIS_URL --queue-name default
+
+volumes:
+  pgdata:

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.agentfabric_runtime_state.json
+.agentfabric_memory.json
+agentfabric.db
+*.db
+backups/
+artifacts/
