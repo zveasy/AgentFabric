@@ -15,8 +15,6 @@ This repository now includes concrete, runnable implementations for all phases:
   - Package integrity verifier, runtime-only secret store, structured logs, metrics, optional tracing.
   - SDK base class (`Agent`) and execution context for tool/memory/event access.
 - **Phase 2 (Marketplace)**:
-
-- **Phase 2 (Marketplace)**:
   - Registry service with publish + versioned package storage.
   - Publish pipeline checks: manifest validation and signature verification.
   - Discovery with search/category/permissions filters and pagination.
