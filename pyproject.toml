@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentfabric"
+version = "0.2.0"
+description = "AgentFabric production scaffolding for phases 2-4"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AgentFabric Team" }]
+license = { text = "MIT" }
+
+[tool.setuptools]
+packages = ["agentfabric", "agentfabric.phase2", "agentfabric.phase3", "agentfabric.phase4"]
