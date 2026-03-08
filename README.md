@@ -1,70 +1,38 @@
 # AgentFabric
 
-<<<<<<< HEAD
-Production-oriented scaffolding for AgentFabric phases 1-4.
+Production-ready runtime and marketplace control plane for AI agents.
 
-This repository now includes execution-order production upgrades:
+## Canonical implementation direction
 
-- **(A)** Postgres-ready SQLAlchemy models + Alembic migrations + queue abstraction (Redis + in-memory fallback).
-- **(B)** FastAPI service with JWT auth middleware and OpenAPI documentation.
-- **(C)** Real integration adapters for signing (`cosign verify-blob`) and payments (Stripe `PaymentIntent`), with deterministic fallbacks for local tests.
-- **(D)** CI/CD workflows, Docker image build, and Kubernetes manifests for API/worker/Postgres/Redis deployment.
+The primary source of truth in this branch is the newer production server stack:
+
+- Postgres-ready SQLAlchemy models + Alembic migrations.
+- FastAPI service with JWT auth middleware and OpenAPI.
+- Queue abstraction with Redis backend and deterministic in-memory fallback.
+- Signing and payment adapters (cosign/stripe with local fallbacks).
+- CI/CD workflows, Docker image build, and Kubernetes manifests.
 
 ## What is implemented
 
-This repository now includes concrete, runnable implementations for all phases:
+- **Phase 1 (Core Runtime)**: protocol envelopes, manifest loading, lifecycle orchestration, sandbox + tool permission checks, scoped memory, observability, and SDK primitives.
+- **Phase 2 (Marketplace)**: registry publish/list/install flows, discovery filters, ratings/moderation hooks, metering, and tenant-scoped controls.
+- **Phase 3 (Collaboration)**: delegation protocol, policy checks, workflow DAG execution, retry/idempotency support, and trace metadata propagation.
+- **Phase 4 (Enterprise)**: RBAC, immutable audit chain, private namespaces, and SLA/support controls.
 
-- **Phase 1 (Core Runtime)**:
-  - Versioned protocol envelope with request/response/event/tool/capability messages.
-  - Manifest loader + `manifest.v1` schema.
-  - Runtime orchestrator lifecycle (`install -> load -> run -> suspend -> uninstall`).
-  - Permission-enforced tool router and sandbox boundary checks.
-  - Persistent scoped memory by `user/session/agent` with TTL retention.
-  - Package integrity verifier, runtime-only secret store, structured logs, metrics, optional tracing.
-  - SDK base class (`Agent`) and execution context for tool/memory/event access.
-- **Phase 2 (Marketplace)**:
-  - Registry service with publish + versioned package storage.
-  - Publish pipeline checks: manifest validation and signature verification.
-  - Discovery with search/category/permissions filters and pagination.
-  - Ratings and moderation hooks.
-  - Billing + metering queue with idempotent processing.
-  - Tenant-scoped installs and namespace-level controls.
-- **Phase 3 (Agent Collaboration)**:
-  - Agent-to-agent delegate/handoff message contract.
-  - Collaboration policy checks (who can call whom, timeout, quotas).
-  - Workflow engine for DAG execution with retries and idempotent run keys.
-  - Cross-node trace metadata emitted in workflow output.
-- **Phase 4 (Enterprise)**:
-  - RBAC role/permission enforcement (`admin`, `developer`, `viewer`).
-  - Immutable audit log with hash chaining.
-  - Private marketplace namespaces with explicit access grants.
-  - SLA/support tier catalog.
+## Production hardening (P0/P1/P2)
 
-## Production hardening implemented (P0, P1, P2)
+- **P0**: durable persistence layer, auth/token lifecycle, migration-driven schema management, and service endpoints.
+- **P1**: package security pipeline, stronger sandbox policies, metrics/traces, backup/restore, and retry worker support.
+- **P2**: moderation queue + resolution, billing settlement pathways, GDPR flows, SIEM export, and legal document lifecycle.
 
-- **P0 (must-have)**:
-  - Durable SQLite persistence for registry, installs, billing events, runtime state, auth tokens, RBAC, namespaces, audit, moderation, compliance, and legal docs.
-  - Hosted HTTP API (`agentfabric.production.api`) for health/auth/registry/runtime/billing/enterprise/compliance ops.
-  - Token auth with expiry, rotation, service identities, and tenant/scope checks.
-- **P1 (security/reliability)**:
-  - Package security pipeline: signature policy, integrity verification, SBOM generation, malware scan hooks.
-  - Sandbox hardening policy additions: denied filesystem prefixes and host egress allow-list.
-  - Ops primitives: Prometheus exporter, trace exporter, backup/restore manager, retry worker.
-- **P2 (marketplace/compliance)**:
-  - Review moderation queue and admin resolution workflow.
-  - Payment gateway abstraction (mock + Stripe adapter hook) and settlement ledger writes.
-  - GDPR deletion request/processor, SIEM audit export, and legal document publish/acceptance tracking.
+## Repository layout
 
-## Layout
-
-- `agentfabric/phase1/`: core runtime, protocol, SDK, sandbox, security, observability.
-- `agentfabric/phase2/`: marketplace services.
-- `agentfabric/phase3/`: collaboration protocol + workflow runtime.
-- `agentfabric/phase4/`: enterprise controls.
-- `agentfabric/production/`: durable control-plane, API server, and production ops modules.
-- `agentfabric/cli.py`: lightweight CLI entrypoint.
-- `agents/manifest_schema/manifest.v1.schema.json`: versioned manifest schema.
-- `tests/`: unit/integration-style tests for phases 1-4.
+- `agentfabric/phase1`, `agentfabric/phase2`, `agentfabric/phase3`, `agentfabric/phase4`: phase implementations.
+- `agentfabric/production`: control-plane services and durable operations modules.
+- `agentfabric/server`: FastAPI app, auth, queue, DB/session, worker, and integrations.
+- `agentfabric/cli.py`: production-oriented CLI entrypoint.
+- `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
+- `tests`: runtime + production + API stack tests.
 
 ## Quickstart
 
@@ -72,349 +40,20 @@ Run tests:
 
 `python -m unittest discover -s tests -v`
 
-Run the CLI:
-
-`python -m agentfabric.cli --help`
-
-Run production API:
-
-`python -m agentfabric.cli prod-api --db-path agentfabric.db --host 127.0.0.1 --port 8080`
-
-## New production server stack
-
-Apply schema migrations:
+Run migrations:
 
 `python -m agentfabric.cli db-migrate --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric"`
 
-Run FastAPI API service:
+Run API:
 
 `python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --host 0.0.0.0 --port 8000`
 
-Run queue worker:
+Run worker:
 
 `python -m agentfabric.cli worker-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --queue-name default`
 
-## Local infrastructure
-
-Bring up local Postgres + Redis + API + worker:
-
-`docker compose up --build`
-
 ## Deployment artifacts
 
-- GitHub Actions:
-  - `.github/workflows/ci.yml`
-  - `.github/workflows/cd.yml`
-- Docker:
-  - `Dockerfile`
-  - `docker-compose.yml`
-- Kubernetes manifests:
-  - `deploy/k8s/namespace.yaml`
-  - `deploy/k8s/configmap.yaml`
-  - `deploy/k8s/secret.example.yaml`
-  - `deploy/k8s/postgres-statefulset.yaml`
-  - `deploy/k8s/redis-deployment.yaml`
-  - `deploy/k8s/api-deployment.yaml`
-  - `deploy/k8s/api-service.yaml`
-  - `deploy/k8s/worker-deployment.yaml`
-
-## Runtime CLI lifecycle (Phase 1)
-
-Example local lifecycle flow:
-
-1. `agentfabric install --manifest /path/to/manifest.json --payload "artifact" --signer dev --key secret`
-2. `agentfabric load --agent-id your.agent.id`
-3. `agentfabric run --agent-id your.agent.id --user u1 --session s1 --request '{"prompt":"hello"}'`
-4. `agentfabric suspend --agent-id your.agent.id`
-5. `agentfabric uninstall --agent-id your.agent.id`
-=======
-**The universal marketplace and runtime for AI agents.**
-
-> AgentFabric is an open agent operating layer that allows developers to publish AI agents and users to install them on top of any LLM or AI system. It provides standardized interfaces, permissions, orchestration, and a secure marketplace for composable AI capabilities.
-
----
-
-## Overview
-
-AgentFabric is a **platform that sits above any LLM or AI system** and enables modular intelligence through installable AI agents.
-
-Instead of building a full AI stack from scratch, developers and organizations can install capabilities such as:
-
-- Data analysis
-- Trading agents
-- Robotics control
-- DevOps automation
-- Legal analysis
-- Research copilots
-- Simulation engines
-
-Agents can be discovered, installed, monetized, and composed through the AgentFabric marketplace.
-
-**AgentFabric acts as the operating system layer for AI agents.**
-
----
-
-## Core Concept
-
-**Traditional AI architecture:**
-
-```
-Application
-     |
-     v
-LLM
-```
-
-**AgentFabric architecture:**
-
-```
-User Interface
-      |
-      v
-AgentFabric Runtime
-      |
-      |---- Installed Agent Modules
-      |---- Tool Execution Layer
-      |---- Memory Layer
-      |---- Permissions & Security
-      |
-      v
-LLM / Custom AI Model
-```
-
-This enables **composable intelligence**.
-
-**Example:** A developer installs ResearchAgent, FinancialAnalysisAgent, CodeReviewAgent, and DataVisualizationAgent. Their base LLM becomes a **multi-capability AI system**.
-
----
-
-## Key Features
-
-### 1. Universal Agent Runtime
-
-Executes agents on top of any model. Compatible with:
-
-- OpenAI
-- Local LLMs
-- Enterprise LLMs
-- Fine-tuned models
-- Domain-specific models
-
-### 2. Agent Marketplace
-
-Developers can publish agents. Users can discover, install, rate, and monetize.
-
-Example categories: Finance · DevOps · Security · Research · Robotics · Energy · Legal · Healthcare · Gaming
-
-### 3. Agent Manifest Standard
-
-Each agent defines its capabilities for safe installation and compatibility checks.
-
-```yaml
-name: financial_analysis_agent
-version: 1.0
-description: Performs financial modeling and forecasting
-
-permissions:
-  - read_market_data
-  - write_reports
-
-inputs:
-  - financial_data
-
-outputs:
-  - forecast
-  - risk_assessment
-
-tools:
-  - pandas
-  - numpy
-  - market_api
-```
-
-### 4. Agent Composability
-
-Agents can collaborate. Example workflow:
-
-```
-ResearchAgent → FinancialAnalysisAgent → StrategyAgent
-```
-
-Agents become building blocks.
-
-### 5. Security Sandbox
-
-Every agent runs inside a controlled environment:
-
-- Permission scopes
-- API isolation
-- Tool restrictions
-- Execution sandbox
-- Signed packages
-- Audit logs
-
-### 6. Billing and Monetization
-
-Developers can charge for agents. Models: per install, per execution, subscription, enterprise license.
-
-Revenue share example: **Developer 80% · Platform 20%**
-
----
-
-## System Architecture
-
-```
-+----------------------------------+
-|        AgentFabric UI            |
-+----------------------------------+
-
-+----------------------------------+
-|     AgentFabric Runtime          |
-|                                  |
-|  - Agent Orchestrator            |
-|  - Tool Router                   |
-|  - Memory Manager                |
-|  - Permission Manager            |
-|  - Execution Sandbox             |
-+----------------------------------+
-
-+----------------------------------+
-|      Installed Agent Modules     |
-|  Research Agent · Trading Agent  |
-|  DevOps Agent · ...              |
-+----------------------------------+
-
-+----------------------------------+
-|      Base Model Layer            |
-|  OpenAI / Local LLM / Enterprise |
-+----------------------------------+
-```
-
-The **Agent Protocol Layer** (the interoperability standard between runtime, agents, and LLMs) is a critical component—see [docs/agent-protocol-layer.md](docs/agent-protocol-layer.md).
-
----
-
-## Tech Stack
-
-| Layer | Choices |
-|-------|---------|
-| **Backend** | Python or Rust · FastAPI · gRPC · asyncio |
-| **Agent Runtime** | LangChain or custom agent loop · message routing · task planner · event bus |
-| **Marketplace** | PostgreSQL · Redis · GraphQL API |
-| **Security** | Containerized execution · Docker sandbox · policy engine |
-| **Infrastructure** | AWS · Kubernetes · EKS · serverless agents |
-
----
-
-## Directory Structure
-
-```
-agentfabric/
-├── runtime/           # Orchestrator, sandbox, memory, routing
-├── marketplace/       # Registry, billing, ratings
-├── agents/            # Manifest schema, packaging, verification
-├── sdk/               # Python, TypeScript
-├── cli/               # agentfabric install | publish | run
-└── docs/              # Architecture, protocol, guides
-```
-
----
-
-## Agent SDK
-
-Developers build agents with a simple interface:
-
-```python
-from agentfabric import Agent
-
-class ResearchAgent(Agent):
-    def run(self, query):
-        results = self.search(query)
-        return self.summarize(results)
-```
-
-**Publish:** `agentfabric publish`  
-**Install:** `agentfabric install research_agent`
-
----
-
-## Security Model
-
-Agents cannot: access arbitrary user files, call unknown APIs, or modify system agents.
-
-They must declare: **permissions**, **tools**, **memory usage**, **data access**. AgentFabric enforces these rules.
-
----
-
-## Product Readiness Roadmap
-
-| Phase | Focus | Timeline | Goal |
-|-------|--------|----------|------|
-| **1** | Core Runtime | 3–6 months | Orchestrator, manifest, sandbox, CLI, SDK. Developers install and run agents locally. |
-| **2** | Marketplace | 6–12 months | Registry, publishing, discovery, ratings, billing. Developers can sell agents. |
-| **3** | Agent Collaboration | — | Agent-to-agent communication, workflow chaining, task delegation. Agents cooperate. |
-| **4** | Enterprise | — | RBAC, audit logs, governance, private marketplaces. Enterprise adoption. |
-
----
-
-## MVP Scope
-
-- Agent runtime
-- Agent manifest system
-- Agent SDK
-- Local marketplace
-- Basic orchestration
-
-**Users should be able to:** (1) install agents, (2) run them, (3) chain them together.
-
----
-
-## Target Users
-
-1. **Developers** — Build and sell agents.
-2. **Companies** — Install specialized AI capabilities.
-3. **AI builders** — Add capabilities without building them from scratch.
-
----
-
-## Why This Matters
-
-Today, every AI system rebuilds tools from scratch. AgentFabric enables **composable intelligence**: *intelligence = installable modules*—just like apps.
-
----
-
-## Example Use Case
-
-A finance company installs: **MarketDataAgent**, **TradingStrategyAgent**, **RiskAnalysisAgent**, **ComplianceAgent**. Their AI system becomes a **financial AI platform** instantly.
-
----
-
-## Long-Term Vision
-
-AgentFabric becomes **the operating system for AI agents**.
-
-- AWS = infrastructure · Stripe = payments · Apple App Store = mobile apps  
-- **AgentFabric = AI capability marketplace**
-
----
-
-## Licensing
-
-**Open core:**
-
-- Core runtime: open source  
-- Marketplace: hosted service  
-- Enterprise features: paid  
-
----
-
-## Initial Launch Strategy
-
-Focus on one vertical first (e.g. DevOps agents, financial analysis agents, cybersecurity agents), then expand.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/](docs/) for architecture and protocol details.
->>>>>>> origin/main
+- GitHub Actions: `.github/workflows/ci.yml`, `.github/workflows/cd.yml`
+- Container: `Dockerfile`, `docker-compose.yml`
+- Kubernetes: `deploy/k8s/*`

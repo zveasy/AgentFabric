@@ -1,7 +1,5 @@
 """Unit tests for the tool router and permission checks."""
 
-import asyncio
-
 import pytest
 
 from agentfabric.runtime.manifest import Manifest
@@ -20,7 +18,7 @@ MANIFEST_WITH_TOOLS = Manifest({
 @pytest.fixture
 def router():
     r = ToolRouter()
-    r.register_tool("allowed_tool", lambda name, args: {"result": args})
+    r.register_tool("allowed_tool", lambda name, args: args)
     return r
 
 
