@@ -1,0 +1,2 @@
+[console_scripts]
+agentfabric = agentfabric.cli.main:main

@@ -22,6 +22,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install .
+          python -m pip install pytest ruff
+      - name: Lint (ruff)
+        run: ruff check agentfabric tests
       - name: Run migrations (sqlite smoke)
         run: |
           python -m agentfabric.cli db-migrate --database-url "sqlite:///./ci.db"
