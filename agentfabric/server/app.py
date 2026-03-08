@@ -35,7 +35,8 @@ from agentfabric.server.schemas import (
     PublishPackageRequest,
     QueueEnqueueRequest,
     QueueMessageResponse,
-    RegisterPrincipalRequest, ReviewContributionRequest,
+    RegisterPrincipalRequest,
+    ReviewContributionRequest,
     SubmitReviewRequest,
     ReviewSummaryResponse,
     RotateTokenRequest,
@@ -43,7 +44,14 @@ from agentfabric.server.schemas import (
     TokenResponse,
     WorkflowRunRequest,
 )
-from agentfabric.server.services import AgentProjectService, AuditService, BillingService, PackageService, QueueService, ReviewService
+from agentfabric.server.services import (
+    AgentProjectService,
+    AuditService,
+    BillingService,
+    PackageService,
+    QueueService,
+    ReviewService,
+)
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
 
 
