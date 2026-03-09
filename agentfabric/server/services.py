@@ -6,12 +6,26 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from hashlib import sha256
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agentfabric.errors import ConflictError, NotFoundError, ValidationError
-from agentfabric.server.models import AuditEvent, BillingEvent, Install, InvoiceLine, Package, PackageReview, PaymentRecord
+from agentfabric.server.models import (
+    AgentProject,
+    AuditEvent,
+    BillingEvent,
+    Install,
+    InvoiceLine,
+    Package,
+    PackageReview,
+    PaymentRecord,
+    ProjectBranch,
+    ProjectContribution,
+    ProjectMaintainer,
+    ProjectRelease,
+)
 from agentfabric.server.payments import MockPaymentProcessor, PaymentProcessor
 from agentfabric.server.queue import QueueBackend, QueueItem, SqlQueueStore
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
@@ -304,3 +318,434 @@ class ReviewService:
         if not row or row.count == 0:
             return {"count": 0, "avg_stars": 0.0}
         return {"count": row.count, "avg_stars": round(float(row.avg_stars), 2)}
+
+
+class AgentProjectService:
+    DEFAULT_ZONES = (
+        "prompts",
+        "tool_adapters",
+        "reasoning_policies",
+        "memory_modules",
+        "evaluators",
+        "domain_packs",
+        "ui_blocks",
+        "safety_constraints",
+        "workflow_steps",
+    )
+    DEFAULT_MERGE_POLICY = {
+        "min_improvements": 1,
+        "allowed_latency_regression_pct": 5.0,
+        "allowed_cost_regression_pct": 5.0,
+        "must_pass_safety": True,
+        "must_pass_regression_tests": True,
+    }
+    RELEASE_CHANNELS = {"stable", "beta", "nightly", "enterprise-certified"}
+    MERGEABLE_STATUSES = {"evaluated", "approved"}
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create_project(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        display_name: str,
+        description: str,
+        created_by: str,
+        contribution_zones: list[str] | None = None,
+        merge_policy: dict[str, Any] | None = None,
+    ) -> AgentProject:
+        existing = self.db.execute(
+            select(AgentProject).where(
+                AgentProject.namespace == namespace,
+                AgentProject.project_id == project_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ConflictError("project already exists")
+        zones = tuple(sorted(set(contribution_zones or self.DEFAULT_ZONES)))
+        if not zones:
+            raise ValidationError("at least one contribution zone is required")
+        effective_policy = dict(self.DEFAULT_MERGE_POLICY)
+        if merge_policy:
+            effective_policy.update(merge_policy)
+        project = AgentProject(
+            namespace=namespace,
+            project_id=project_id,
+            display_name=display_name,
+            description=description,
+            default_branch="main",
+            contribution_zones_csv=",".join(zones),
+            merge_policy_json=json.dumps(effective_policy, sort_keys=True),
+            created_by=created_by,
+        )
+        self.db.add(project)
+        self.db.flush()
+        self.db.add(ProjectMaintainer(project_ref_id=project.id, principal_id=created_by))
+        self.db.add(ProjectBranch(project_ref_id=project.id, branch_name="main", base_ref="root", created_by=created_by))
+        self.db.flush()
+        return project
+
+    def get_project(self, *, namespace: str, project_id: str) -> AgentProject:
+        project = self.db.execute(
+            select(AgentProject).where(
+                AgentProject.namespace == namespace,
+                AgentProject.project_id == project_id,
+            )
+        ).scalar_one_or_none()
+        if not project:
+            raise NotFoundError("project not found")
+        return project
+
+    def get_project_detail(self, *, namespace: str, project_id: str) -> dict[str, Any]:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        return self._serialize_project(project)
+
+    def list_projects(self, *, namespace: str | None = None, query: str | None = None, page: int = 1, page_size: int = 20) -> dict:
+        if page < 1 or page_size < 1:
+            raise ValidationError("page and page_size must be positive")
+        stmt = select(AgentProject).order_by(AgentProject.created_at.desc())
+        rows = self.db.execute(stmt).scalars().all()
+        filtered = []
+        for item in rows:
+            if namespace and item.namespace != namespace:
+                continue
+            if query and query.lower() not in item.project_id.lower() and query.lower() not in item.display_name.lower():
+                continue
+            filtered.append(item)
+        total = len(filtered)
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        start = (page - 1) * page_size
+        end = start + page_size
+        items = [self._serialize_project(row) for row in filtered[start:end]]
+        return {"items": items, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
+
+    def add_maintainer(self, *, namespace: str, project_id: str, actor_id: str, principal_id: str) -> None:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        self._require_maintainer(project.id, actor_id)
+        existing = self.db.execute(
+            select(ProjectMaintainer).where(
+                ProjectMaintainer.project_ref_id == project.id,
+                ProjectMaintainer.principal_id == principal_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return
+        self.db.add(ProjectMaintainer(project_ref_id=project.id, principal_id=principal_id))
+        self.db.flush()
+
+    def create_branch(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        actor_id: str,
+        branch_name: str,
+        base_ref: str,
+    ) -> ProjectBranch:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        self._require_maintainer(project.id, actor_id)
+        existing = self.db.execute(
+            select(ProjectBranch).where(
+                ProjectBranch.project_ref_id == project.id,
+                ProjectBranch.branch_name == branch_name,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ConflictError("branch already exists")
+        branch = ProjectBranch(
+            project_ref_id=project.id,
+            branch_name=branch_name,
+            base_ref=base_ref,
+            status="active",
+            created_by=actor_id,
+        )
+        self.db.add(branch)
+        self.db.flush()
+        return branch
+
+    def submit_contribution(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        submitter_id: str,
+        branch_name: str,
+        title: str,
+        summary: str,
+        contribution_zone: str,
+        contribution_manifest: dict[str, Any],
+        metrics: dict[str, Any],
+        regressions: dict[str, Any],
+    ) -> ProjectContribution:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        self._ensure_branch(project.id, branch_name)
+        allowed_zones = self._project_zones(project)
+        if contribution_zone not in allowed_zones:
+            raise ValidationError(f"contribution zone '{contribution_zone}' is not enabled for this project")
+        contribution = ProjectContribution(
+            project_ref_id=project.id,
+            branch_name=branch_name,
+            title=title,
+            summary=summary,
+            contribution_zone=contribution_zone,
+            manifest_json=json.dumps(contribution_manifest or {}, sort_keys=True),
+            metrics_json=json.dumps(metrics or {}, sort_keys=True),
+            regressions_json=json.dumps(regressions or {}, sort_keys=True),
+            status="pending",
+            submitter_id=submitter_id,
+        )
+        self.db.add(contribution)
+        self.db.flush()
+        return contribution
+
+    def evaluate_contribution(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        contribution_id: int,
+    ) -> dict[str, Any]:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        contribution = self._get_contribution(project.id, contribution_id)
+        policy = self._merge_policy(project)
+        metrics = json.loads(contribution.metrics_json or "{}")
+        regressions = json.loads(contribution.regressions_json or "{}")
+
+        improved_dimensions = [
+            key
+            for key, value in (metrics.get("improvements") or {}).items()
+            if isinstance(value, (int, float)) and value > 0
+        ]
+        reasons = []
+        if len(improved_dimensions) < int(policy.get("min_improvements", 1)):
+            reasons.append("insufficient measurable depth improvements")
+
+        latency_regression = float(regressions.get("latency_regression_pct", 0.0))
+        if latency_regression > float(policy.get("allowed_latency_regression_pct", 5.0)):
+            reasons.append("latency regression exceeds policy threshold")
+
+        cost_regression = float(regressions.get("cost_regression_pct", 0.0))
+        if cost_regression > float(policy.get("allowed_cost_regression_pct", 5.0)):
+            reasons.append("cost regression exceeds policy threshold")
+
+        if bool(policy.get("must_pass_safety", True)) and not bool(metrics.get("safety_passed", False)):
+            reasons.append("safety checks failed")
+        if bool(policy.get("must_pass_regression_tests", True)) and not bool(metrics.get("regression_tests_passed", False)):
+            reasons.append("regression tests failed")
+
+        gate_passed = not reasons
+        evaluation = {
+            "gate_passed": gate_passed,
+            "improved_dimensions": improved_dimensions,
+            "policy": policy,
+            "reasons": reasons,
+            "evaluation_score": float(metrics.get("evaluation_score", 0.0)),
+        }
+        contribution.evaluation_json = json.dumps(evaluation, sort_keys=True)
+        contribution.status = "evaluated" if gate_passed else "rejected"
+        if not gate_passed:
+            contribution.decision_notes = "; ".join(reasons)
+            contribution.decided_at = utc_now()
+        self.db.add(contribution)
+        self.db.flush()
+        return evaluation
+
+    def review_contribution(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        contribution_id: int,
+        reviewer_id: str,
+        decision: str,
+        decision_notes: str,
+        release_version: str | None = None,
+        release_channel: str = "stable",
+    ) -> dict[str, Any]:
+        if decision not in {"merge", "reject"}:
+            raise ValidationError("decision must be 'merge' or 'reject'")
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        self._require_maintainer(project.id, reviewer_id)
+        contribution = self._get_contribution(project.id, contribution_id)
+        if decision == "reject":
+            contribution.status = "rejected"
+            contribution.reviewer_id = reviewer_id
+            contribution.decision_notes = decision_notes
+            contribution.decided_at = utc_now()
+            self.db.add(contribution)
+            self.db.flush()
+            return {"status": contribution.status, "contribution_id": contribution.id}
+
+        if contribution.status not in self.MERGEABLE_STATUSES:
+            raise ValidationError("contribution must be evaluated before merge")
+        evaluation = json.loads(contribution.evaluation_json or "{}")
+        if not evaluation.get("gate_passed"):
+            raise ValidationError("contribution did not pass automated evaluation gate")
+        channel = release_channel.strip().lower()
+        if channel not in self.RELEASE_CHANNELS:
+            raise ValidationError(f"unsupported release channel: {release_channel}")
+        if not release_version:
+            raise ValidationError("release_version is required when merging")
+        existing_release = self.db.execute(
+            select(ProjectRelease).where(
+                ProjectRelease.project_ref_id == project.id,
+                ProjectRelease.version == release_version,
+                ProjectRelease.channel == channel,
+            )
+        ).scalar_one_or_none()
+        if existing_release:
+            raise ConflictError("release already exists for this version/channel")
+        release = ProjectRelease(
+            project_ref_id=project.id,
+            version=release_version,
+            channel=channel,
+            source_branch=contribution.branch_name,
+            changelog=decision_notes,
+            created_by=reviewer_id,
+        )
+        self.db.add(release)
+        contribution.status = "merged"
+        contribution.reviewer_id = reviewer_id
+        contribution.decision_notes = decision_notes
+        contribution.merged_release_version = release_version
+        contribution.decided_at = utc_now()
+        self.db.add(contribution)
+        self.db.flush()
+        return {"status": contribution.status, "contribution_id": contribution.id, "release": self._serialize_release(release)}
+
+    def list_releases(self, *, namespace: str, project_id: str, channel: str | None = None) -> list[dict[str, Any]]:
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        stmt = select(ProjectRelease).where(ProjectRelease.project_ref_id == project.id).order_by(ProjectRelease.created_at.desc())
+        rows = self.db.execute(stmt).scalars().all()
+        output = []
+        normalized_channel = channel.strip().lower() if channel else None
+        for row in rows:
+            if normalized_channel and row.channel != normalized_channel:
+                continue
+            output.append(self._serialize_release(row))
+        return output
+
+    def list_contributions(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        if limit < 1 or limit > 200:
+            raise ValidationError("limit must be between 1 and 200")
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        stmt = (
+            select(ProjectContribution)
+            .where(ProjectContribution.project_ref_id == project.id)
+            .order_by(ProjectContribution.created_at.desc())
+            .limit(limit)
+        )
+        rows = self.db.execute(stmt).scalars().all()
+        normalized_status = status.strip().lower() if status else None
+        items = []
+        for row in rows:
+            if normalized_status and row.status != normalized_status:
+                continue
+            items.append(self._serialize_contribution(row))
+        return {"items": items, "total": len(items)}
+
+    def _require_maintainer(self, project_ref_id: int, principal_id: str) -> None:
+        row = self.db.execute(
+            select(ProjectMaintainer).where(
+                ProjectMaintainer.project_ref_id == project_ref_id,
+                ProjectMaintainer.principal_id == principal_id,
+            )
+        ).scalar_one_or_none()
+        if not row:
+            raise ValidationError("principal is not a project maintainer")
+
+    def _ensure_branch(self, project_ref_id: int, branch_name: str) -> ProjectBranch:
+        branch = self.db.execute(
+            select(ProjectBranch).where(
+                ProjectBranch.project_ref_id == project_ref_id,
+                ProjectBranch.branch_name == branch_name,
+            )
+        ).scalar_one_or_none()
+        if not branch:
+            raise NotFoundError("branch not found")
+        return branch
+
+    def _get_contribution(self, project_ref_id: int, contribution_id: int) -> ProjectContribution:
+        contribution = self.db.execute(
+            select(ProjectContribution).where(
+                ProjectContribution.project_ref_id == project_ref_id,
+                ProjectContribution.id == contribution_id,
+            )
+        ).scalar_one_or_none()
+        if not contribution:
+            raise NotFoundError("contribution not found")
+        return contribution
+
+    def _project_zones(self, project: AgentProject) -> set[str]:
+        return {z for z in project.contribution_zones_csv.split(",") if z}
+
+    def _merge_policy(self, project: AgentProject) -> dict[str, Any]:
+        policy = dict(self.DEFAULT_MERGE_POLICY)
+        policy.update(json.loads(project.merge_policy_json or "{}"))
+        return policy
+
+    def _serialize_project(self, project: AgentProject) -> dict[str, Any]:
+        maintainers = self.db.execute(
+            select(ProjectMaintainer).where(ProjectMaintainer.project_ref_id == project.id)
+        ).scalars().all()
+        branches = self.db.execute(
+            select(ProjectBranch).where(ProjectBranch.project_ref_id == project.id).order_by(ProjectBranch.created_at.asc())
+        ).scalars().all()
+        releases = self.db.execute(
+            select(ProjectRelease).where(ProjectRelease.project_ref_id == project.id).order_by(ProjectRelease.created_at.desc())
+        ).scalars().all()
+        return {
+            "namespace": project.namespace,
+            "project_id": project.project_id,
+            "display_name": project.display_name,
+            "description": project.description,
+            "default_branch": project.default_branch,
+            "contribution_zones": sorted(self._project_zones(project)),
+            "merge_policy": self._merge_policy(project),
+            "maintainers": [m.principal_id for m in maintainers],
+            "branches": [
+                {"branch_name": b.branch_name, "base_ref": b.base_ref, "status": b.status, "created_by": b.created_by}
+                for b in branches
+            ],
+            "releases": [self._serialize_release(r) for r in releases],
+            "created_by": project.created_by,
+            "created_at": project.created_at.isoformat(),
+        }
+
+    def _serialize_release(self, release: ProjectRelease) -> dict[str, Any]:
+        return {
+            "version": release.version,
+            "channel": release.channel,
+            "source_branch": release.source_branch,
+            "changelog": release.changelog,
+            "created_by": release.created_by,
+            "created_at": release.created_at.isoformat(),
+        }
+
+    def _serialize_contribution(self, contribution: ProjectContribution) -> dict[str, Any]:
+        evaluation = json.loads(contribution.evaluation_json or "{}")
+        return {
+            "contribution_id": contribution.id,
+            "branch_name": contribution.branch_name,
+            "title": contribution.title,
+            "summary": contribution.summary,
+            "contribution_zone": contribution.contribution_zone,
+            "status": contribution.status,
+            "submitter_id": contribution.submitter_id,
+            "reviewer_id": contribution.reviewer_id,
+            "decision_notes": contribution.decision_notes,
+            "merged_release_version": contribution.merged_release_version,
+            "evaluation_gate_passed": evaluation.get("gate_passed"),
+            "evaluation_score": evaluation.get("evaluation_score"),
+            "created_at": contribution.created_at.isoformat(),
+            "decided_at": contribution.decided_at.isoformat() if contribution.decided_at else None,
+        }

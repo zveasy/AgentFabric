@@ -117,3 +117,71 @@ class WorkflowRunRequest(BaseModel):
 
 class AssignRoleRequest(BaseModel):
     role: str
+
+
+class CreateAgentProjectRequest(BaseModel):
+    namespace: str
+    project_id: str
+    display_name: str
+    description: str = ""
+    contribution_zones: list[str] = Field(default_factory=list)
+    merge_policy: dict = Field(default_factory=dict)
+
+
+class AgentProjectResponse(BaseModel):
+    namespace: str
+    project_id: str
+    display_name: str
+    description: str
+    default_branch: str
+    contribution_zones: list[str]
+    merge_policy: dict
+    maintainers: list[str]
+    branches: list[dict]
+    releases: list[dict]
+    created_by: str
+    created_at: str
+
+
+class ListAgentProjectsResponse(BaseModel):
+    items: list[dict]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class AddMaintainerRequest(BaseModel):
+    principal_id: str
+
+
+class CreateBranchRequest(BaseModel):
+    branch_name: str
+    base_ref: str = "main"
+
+
+class SubmitContributionRequest(BaseModel):
+    branch_name: str
+    title: str
+    summary: str = ""
+    contribution_zone: str
+    contribution_manifest: dict = Field(default_factory=dict)
+    metrics: dict = Field(default_factory=dict)
+    regressions: dict = Field(default_factory=dict)
+
+
+class ContributionResponse(BaseModel):
+    contribution_id: int
+    status: str
+
+
+class ReviewContributionRequest(BaseModel):
+    decision: str
+    decision_notes: str = ""
+    release_version: Optional[str] = None
+    release_channel: str = "stable"
+
+
+class ListContributionsResponse(BaseModel):
+    items: list[dict]
+    total: int

@@ -42,6 +42,11 @@ class AlembicMigrationTests(unittest.TestCase):
                 "audit_events",
                 "payment_records",
                 "package_reviews",
+                "agent_projects",
+                "project_maintainers",
+                "project_branches",
+                "project_contributions",
+                "project_releases",
             }
             self.assertTrue(expected.issubset(tables), f"Missing tables: {expected - tables}")
 

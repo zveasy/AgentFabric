@@ -7,36 +7,54 @@ import shutil
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from agentfabric.errors import ConflictError, NotFoundError, ValidationError
 from agentfabric.server.auth import AuthService, require_scopes
 from agentfabric.server.config import Settings, get_settings
 from agentfabric.server.database import Base, build_session_factory
 from agentfabric.server.payments import MockPaymentProcessor, StripePaymentProcessor
 from agentfabric.server.queue import InMemoryQueueBackend, RedisQueueBackend
 from agentfabric.server.schemas import (
+    AddMaintainerRequest,
+    AgentProjectResponse,
+    AssignRoleRequest,
     BillingEventRequest,
+    ContributionResponse,
+    CreateAgentProjectRequest,
+    CreateBranchRequest,
     HealthResponse,
     InstallPackageRequest,
     InvoiceResponse,
     IssueTokenRequest,
+    ListAgentProjectsResponse,
+    ListContributionsResponse,
     ListPackagesResponse,
     PackageResponse,
     PublishPackageRequest,
     QueueEnqueueRequest,
     QueueMessageResponse,
     RegisterPrincipalRequest,
-    RotateTokenRequest,
-    TokenResponse,
+    ReviewContributionRequest,
     SubmitReviewRequest,
     ReviewSummaryResponse,
+    RotateTokenRequest,
+    SubmitContributionRequest,
+    TokenResponse,
     WorkflowRunRequest,
-    AssignRoleRequest,
 )
-from agentfabric.server.services import AuditService, BillingService, PackageService, QueueService, ReviewService
+from agentfabric.server.services import (
+    AgentProjectService,
+    AuditService,
+    BillingService,
+    PackageService,
+    QueueService,
+    ReviewService,
+)
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
+from agentfabric.server.forge_ui import render_forge_ui
 
 
 def choose_queue_backend(settings: Settings):
@@ -74,6 +92,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    @app.exception_handler(ValidationError)
+    async def validation_error_handler(_: Request, exc: ValidationError):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(NotFoundError)
+    async def not_found_error_handler(_: Request, exc: NotFoundError):
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(ConflictError)
+    async def conflict_error_handler(_: Request, exc: ConflictError):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     def get_db():
         db = session_factory()
         try:
@@ -97,6 +127,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "/openapi.json",
             "/docs",
             "/redoc",
+            "/forge",
         }:
             return await call_next(request)
         try:
@@ -132,9 +163,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "service": "AgentFabric",
             "message": "API is running. Open /docs for interactive API documentation.",
             "docs": "/docs",
+            "forge": "/forge",
             "health": "/health",
             "openapi": "/openapi.json",
         }
+
+    @app.get("/forge", response_class=HTMLResponse, include_in_schema=False)
+    def forge_interface():
+        return render_forge_ui()
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon():
@@ -245,6 +281,160 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         review_svc = ReviewService(db)
         review_svc.submit(tenant_id=payload.tenant_id, user_id=payload.user_id, package_fqid=fqid, stars=payload.stars, review_text=payload.review_text)
         return {"status": "created"}
+
+    @app.post("/projects", response_model=AgentProjectResponse, tags=["projects"])
+    def create_project(payload: CreateAgentProjectRequest, request: Request, db: Session = Depends(get_db)):
+        principal = require_scopes(request, ["projects.manage"], tenant_id=payload.namespace)
+        project_svc = AgentProjectService(db)
+        project_svc.create_project(
+            namespace=payload.namespace,
+            project_id=payload.project_id,
+            display_name=payload.display_name,
+            description=payload.description,
+            created_by=principal.principal_id,
+            contribution_zones=payload.contribution_zones,
+            merge_policy=payload.merge_policy,
+        )
+        return AgentProjectResponse(**project_svc.get_project_detail(namespace=payload.namespace, project_id=payload.project_id))
+
+    @app.get("/projects", response_model=ListAgentProjectsResponse, tags=["projects"])
+    def list_projects(
+        request: Request,
+        namespace: Optional[str] = None,
+        query: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+        db: Session = Depends(get_db),
+    ):
+        require_scopes(request, ["projects.read"])
+        project_svc = AgentProjectService(db)
+        return ListAgentProjectsResponse(**project_svc.list_projects(namespace=namespace, query=query, page=page, page_size=page_size))
+
+    @app.get("/projects/{namespace}/{project_id}", response_model=AgentProjectResponse, tags=["projects"])
+    def get_project(namespace: str, project_id: str, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["projects.read"])
+        project_svc = AgentProjectService(db)
+        return AgentProjectResponse(**project_svc.get_project_detail(namespace=namespace, project_id=project_id))
+
+    @app.post("/projects/{namespace}/{project_id}/maintainers", tags=["projects"])
+    def add_project_maintainer(
+        namespace: str,
+        project_id: str,
+        payload: AddMaintainerRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        principal = require_scopes(request, ["projects.manage"], tenant_id=namespace)
+        project_svc = AgentProjectService(db)
+        project_svc.add_maintainer(
+            namespace=namespace,
+            project_id=project_id,
+            actor_id=principal.principal_id,
+            principal_id=payload.principal_id,
+        )
+        return {"status": "added"}
+
+    @app.post("/projects/{namespace}/{project_id}/branches", tags=["projects"])
+    def create_project_branch(
+        namespace: str,
+        project_id: str,
+        payload: CreateBranchRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        principal = require_scopes(request, ["projects.manage"], tenant_id=namespace)
+        project_svc = AgentProjectService(db)
+        branch = project_svc.create_branch(
+            namespace=namespace,
+            project_id=project_id,
+            actor_id=principal.principal_id,
+            branch_name=payload.branch_name,
+            base_ref=payload.base_ref,
+        )
+        return {"branch_name": branch.branch_name, "base_ref": branch.base_ref, "status": branch.status}
+
+    @app.post("/projects/{namespace}/{project_id}/contributions", response_model=ContributionResponse, tags=["projects"])
+    def submit_contribution(
+        namespace: str,
+        project_id: str,
+        payload: SubmitContributionRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        principal = require_scopes(request, ["projects.contribute"])
+        project_svc = AgentProjectService(db)
+        contribution = project_svc.submit_contribution(
+            namespace=namespace,
+            project_id=project_id,
+            submitter_id=principal.principal_id,
+            branch_name=payload.branch_name,
+            title=payload.title,
+            summary=payload.summary,
+            contribution_zone=payload.contribution_zone,
+            contribution_manifest=payload.contribution_manifest,
+            metrics=payload.metrics,
+            regressions=payload.regressions,
+        )
+        return ContributionResponse(contribution_id=contribution.id, status=contribution.status)
+
+    @app.get("/projects/{namespace}/{project_id}/contributions", response_model=ListContributionsResponse, tags=["projects"])
+    def list_contributions(
+        namespace: str,
+        project_id: str,
+        request: Request,
+        status: Optional[str] = None,
+        limit: int = 50,
+        db: Session = Depends(get_db),
+    ):
+        require_scopes(request, ["projects.read"])
+        project_svc = AgentProjectService(db)
+        return project_svc.list_contributions(namespace=namespace, project_id=project_id, status=status, limit=limit)
+
+    @app.post("/projects/{namespace}/{project_id}/contributions/{contribution_id}/evaluate", tags=["projects"])
+    def evaluate_contribution(
+        namespace: str,
+        project_id: str,
+        contribution_id: int,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        require_scopes(request, ["projects.evaluate"])
+        project_svc = AgentProjectService(db)
+        return project_svc.evaluate_contribution(namespace=namespace, project_id=project_id, contribution_id=contribution_id)
+
+    @app.post("/projects/{namespace}/{project_id}/contributions/{contribution_id}/review", tags=["projects"])
+    def review_contribution(
+        namespace: str,
+        project_id: str,
+        contribution_id: int,
+        payload: ReviewContributionRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        principal = require_scopes(request, ["projects.manage"], tenant_id=namespace)
+        project_svc = AgentProjectService(db)
+        return project_svc.review_contribution(
+            namespace=namespace,
+            project_id=project_id,
+            contribution_id=contribution_id,
+            reviewer_id=principal.principal_id,
+            decision=payload.decision,
+            decision_notes=payload.decision_notes,
+            release_version=payload.release_version,
+            release_channel=payload.release_channel,
+        )
+
+    @app.get("/projects/{namespace}/{project_id}/releases", tags=["projects"])
+    def list_project_releases(
+        namespace: str,
+        project_id: str,
+        request: Request,
+        channel: Optional[str] = None,
+        db: Session = Depends(get_db),
+    ):
+        require_scopes(request, ["projects.read"])
+        project_svc = AgentProjectService(db)
+        return {"items": project_svc.list_releases(namespace=namespace, project_id=project_id, channel=channel)}
 
     @app.post("/billing/events", tags=["billing"])
     def record_billing_event(payload: BillingEventRequest, request: Request, db: Session = Depends(get_db)):
