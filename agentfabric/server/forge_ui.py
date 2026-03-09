@@ -197,6 +197,102 @@ def render_forge_ui() -> str:
     }
     .hero-kpi .num { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.1; }
     .hero-kpi .txt { font-size: 11px; color: #667085; text-transform: uppercase; }
+    .flow {
+      margin: 12px 20px 0;
+      border: 1px solid rgba(255, 255, 255, 0.62);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: var(--shadow-soft);
+      padding: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .flow-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .flow-head h2 {
+      margin: 0;
+      font-size: 16px;
+      color: #0f172a;
+      letter-spacing: .1px;
+    }
+    #flowHint {
+      color: #475467;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .flow-steps {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      margin-bottom: 10px;
+    }
+    .flow-step {
+      flex: 1 0 180px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      background: #f8fafc;
+      color: #475467;
+      font-size: 12px;
+      min-height: 56px;
+    }
+    .flow-step strong {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }
+    .flow-state {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: #e2e8f0;
+      color: #334155;
+      border: 1px solid rgba(15, 23, 42, 0.14);
+    }
+    .flow-step.done {
+      border-color: rgba(23, 163, 74, 0.5);
+      background: rgba(236, 253, 243, 0.9);
+    }
+    .flow-step.done .flow-state {
+      background: rgba(22, 163, 74, 0.14);
+      color: #0f7a35;
+      border-color: rgba(22, 163, 74, 0.25);
+    }
+    .flow-step.active {
+      border-color: rgba(37, 99, 235, 0.5);
+      background: rgba(239, 246, 255, 0.95);
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16);
+    }
+    .flow-step.active .flow-state {
+      background: rgba(37, 99, 235, 0.14);
+      color: #1d4ed8;
+      border-color: rgba(37, 99, 235, 0.28);
+    }
+    .api-map {
+      margin: 0;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: #0f172a;
+      color: #dbe7ff;
+      font-size: 11px;
+      line-height: 1.45;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
     .layout {
       display: grid;
       gap: 12px;
@@ -214,6 +310,16 @@ def render_forge_ui() -> str:
     .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .2px; color: #0f172a; }
     .label { color: #667085; font-size: 12px; margin: 8px 0 4px 0; }
     .muted { color: #64748b; font-size: 12px; line-height: 1.45; }
+    .helper {
+      font-size: 11px;
+      color: #64748b;
+      margin: 4px 0 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.06);
+      border: 1px dashed rgba(37, 99, 235, 0.24);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
     .row { display: flex; gap: 8px; }
     .row > * { flex: 1; }
     .pr-stats {
@@ -335,6 +441,24 @@ def render_forge_ui() -> str:
       <div class="hero-kpi"><div class="num" id="heroLatestRelease">-</div><div class="txt">Latest stable release</div></div>
     </div>
   </section>
+  <section class="flow">
+    <div class="flow-head">
+      <h2>Coder flow</h2>
+      <span id="flowHint">Start by creating/opening a pull request.</span>
+    </div>
+    <div class="flow-steps">
+      <div id="flowStep1" class="flow-step"><strong>1. Branch <span id="flowState1" class="flow-state">pending</span></strong>Create or select a target branch.</div>
+      <div id="flowStep2" class="flow-step"><strong>2. Pull request <span id="flowState2" class="flow-state">pending</span></strong>Submit contribution package.</div>
+      <div id="flowStep3" class="flow-step"><strong>3. Checks <span id="flowState3" class="flow-state">pending</span></strong>Run automated evaluation gate.</div>
+      <div id="flowStep4" class="flow-step"><strong>4. Merge <span id="flowState4" class="flow-state">pending</span></strong>Apply maintainer decision.</div>
+    </div>
+    <pre class="api-map">UI -> API map
+branch: POST /projects/{namespace}/{project_id}/branches
+pull request: POST /projects/{namespace}/{project_id}/contributions
+checks: POST /projects/{namespace}/{project_id}/contributions/{id}/evaluate
+merge/reject: POST /projects/{namespace}/{project_id}/contributions/{id}/review
+releases: GET /projects/{namespace}/{project_id}/releases</pre>
+  </section>
 
   <div class="layout">
     <aside class="card">
@@ -359,6 +483,7 @@ def render_forge_ui() -> str:
       <input id="branchName" value="improved-citation-module" />
       <div class="label">Base ref</div>
       <input id="baseRef" value="main" />
+      <div class="helper">POST /projects/{namespace}/{project_id}/branches</div>
       <button id="createBranch" style="margin-top:8px;">Create branch</button>
     </aside>
 
@@ -381,6 +506,7 @@ def render_forge_ui() -> str:
 
       <div class="card" style="margin-top:12px;">
         <h3>Open pull request</h3>
+        <div class="helper">POST /projects/{namespace}/{project_id}/contributions</div>
         <div class="label">Title</div>
         <input id="contribTitle" value="Improve citation quality" />
         <div class="label">Summary</div>
@@ -418,6 +544,7 @@ def render_forge_ui() -> str:
 
       <div class="card" style="margin-top:12px;">
         <h3>Checks and merge</h3>
+        <div class="helper">evaluate -> /contributions/{id}/evaluate · review -> /contributions/{id}/review</div>
         <div class="row">
           <div>
             <div class="label">Contribution ID</div>
@@ -473,7 +600,11 @@ def render_forge_ui() -> str:
   </div>
 
   <script>
-    const state = { lastContributionId: null, statusFilter: null };
+    const state = {
+      lastContributionId: null,
+      statusFilter: null,
+      flow: { branchReady: false, prOpened: false, checksPassed: false, merged: false, releaseVisible: false },
+    };
 
     function value(id) { return document.getElementById(id).value.trim(); }
     function jsonValue(id, fallback) { const raw = value(id); return raw ? JSON.parse(raw) : fallback; }
@@ -493,6 +624,8 @@ def render_forge_ui() -> str:
       document.getElementById("result").textContent = rendered;
       document.getElementById("toast").textContent = "Last result\\n\\n" + rendered;
       logEvent(label, data, ok);
+      updateFlowState(label, data, ok);
+      renderFlowGuide();
     }
 
     function logEvent(title, payload, ok = true) {
@@ -514,6 +647,51 @@ def render_forge_ui() -> str:
     function updateRepoHeader() {
       document.getElementById("repoPathNs").textContent = ns() || "namespace";
       document.getElementById("repoPathProject").textContent = pid() || "project";
+    }
+
+    function updateFlowState(label, data, ok) {
+      if (!ok) { return; }
+      if (label === "Branch created") { state.flow.branchReady = true; }
+      if (label === "Pull request opened") {
+        state.flow.branchReady = true;
+        state.flow.prOpened = true;
+      }
+      if (label === "Checks completed" && data && data.gate_passed === true) { state.flow.checksPassed = true; }
+      if (label === "Pull request decision applied" && data && data.status === "merged") { state.flow.merged = true; }
+      if (label === "Releases refreshed" && data && data.items && data.items.length > 0) { state.flow.releaseVisible = true; }
+    }
+
+    function renderFlowGuide() {
+      const steps = [
+        { id: "flowStep1", done: state.flow.branchReady, active: !state.flow.branchReady },
+        { id: "flowStep2", done: state.flow.prOpened, active: state.flow.branchReady && !state.flow.prOpened },
+        { id: "flowStep3", done: state.flow.checksPassed, active: state.flow.prOpened && !state.flow.checksPassed },
+        { id: "flowStep4", done: state.flow.merged, active: state.flow.checksPassed && !state.flow.merged },
+      ];
+      steps.forEach(function(step) {
+        const node = document.getElementById(step.id);
+        node.classList.toggle("done", step.done);
+        node.classList.toggle("active", step.active);
+      });
+      const states = [
+        { id: "flowState1", done: steps[0].done, active: steps[0].active },
+        { id: "flowState2", done: steps[1].done, active: steps[1].active },
+        { id: "flowState3", done: steps[2].done, active: steps[2].active },
+        { id: "flowState4", done: steps[3].done, active: steps[3].active },
+      ];
+      states.forEach(function(step) {
+        const node = document.getElementById(step.id);
+        if (step.done) { node.textContent = "done"; return; }
+        if (step.active) { node.textContent = "active"; return; }
+        node.textContent = "pending";
+      });
+      let hint = "Start by creating/opening a pull request.";
+      if (state.flow.branchReady && !state.flow.prOpened) { hint = "Branch ready. Next: open a pull request."; }
+      if (state.flow.prOpened && !state.flow.checksPassed) { hint = "PR opened. Next: run checks."; }
+      if (state.flow.checksPassed && !state.flow.merged) { hint = "Checks passed. Next: merge the pull request."; }
+      if (state.flow.merged && !state.flow.releaseVisible) { hint = "Merged. Next: refresh releases to verify stable release."; }
+      if (state.flow.releaseVisible) { hint = "Release confirmed. Flow complete."; }
+      document.getElementById("flowHint").textContent = hint;
     }
 
     function renderPullRequests(items) {
@@ -762,6 +940,7 @@ def render_forge_ui() -> str:
     };
 
     updateRepoHeader();
+    renderFlowGuide();
   </script>
 </body>
 </html>
