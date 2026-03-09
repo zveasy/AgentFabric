@@ -12,66 +12,73 @@ def render_forge_ui() -> str:
   <title>AgentForge Repository</title>
   <style>
     :root {
-      --bg: #0b0f14;
-      --bg-elevated: #111827;
-      --panel: #161b22;
-      --panel-soft: #1c2430;
-      --muted: #8b949e;
-      --border: #30363d;
-      --text: #e6edf3;
-      --accent: #1f6feb;
-      --green: #238636;
-      --purple: #8957e5;
-      --red: #da3633;
-      --shadow: 0 8px 24px rgba(1, 4, 9, 0.28);
+      --bg: #f3f5f8;
+      --bg-grad-1: rgba(62, 99, 221, 0.18);
+      --bg-grad-2: rgba(139, 92, 246, 0.16);
+      --surface: rgba(255, 255, 255, 0.72);
+      --surface-strong: rgba(255, 255, 255, 0.9);
+      --surface-dark: #0f1729;
+      --muted: #667085;
+      --border: rgba(15, 23, 42, 0.14);
+      --text: #0f172a;
+      --text-on-dark: #e5e7eb;
+      --accent: #2563eb;
+      --green: #17a34a;
+      --purple: #7c3aed;
+      --red: #dc2626;
+      --ring: rgba(37, 99, 235, 0.24);
+      --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --shadow-strong: 0 18px 48px rgba(15, 23, 42, 0.16);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       background:
-        radial-gradient(circle at 20% -10%, rgba(56, 139, 253, 0.15), transparent 28%),
-        radial-gradient(circle at 80% -20%, rgba(137, 87, 229, 0.16), transparent 28%),
+        radial-gradient(circle at 20% -10%, var(--bg-grad-1), transparent 30%),
+        radial-gradient(circle at 80% -20%, var(--bg-grad-2), transparent 33%),
         var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text-on-dark);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
       min-height: 100vh;
     }
     input, textarea, select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      background: #0b0f14;
-      color: var(--text);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #111827;
       transition: border-color .15s ease, box-shadow .15s ease;
+      font-size: 13px;
     }
     input:focus, textarea:focus, select:focus {
       outline: none;
-      border-color: #2f81f7;
-      box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.25);
+      border-color: #2563eb;
+      box-shadow: 0 0 0 4px var(--ring);
     }
     button {
       border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      background: #21262d;
-      padding: 8px 10px;
+      border-radius: 10px;
+      color: #111827;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 9px 12px;
       cursor: pointer;
       font-weight: 600;
-      transition: transform .05s ease, background .15s ease, border-color .15s ease;
+      transition: transform .05s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
     }
-    button:hover { background: #2a3038; border-color: #3a414b; }
+    button:hover { background: #fff; border-color: rgba(15, 23, 42, 0.24); }
     button:active { transform: translateY(1px); }
-    button.primary { background: var(--green); border-color: #2ea043; }
-    button.primary:hover { background: #2ea043; }
-    button.blue { background: var(--accent); border-color: #1f6feb; }
-    button.blue:hover { background: #2a7df7; }
-    button.ghost { background: transparent; }
+    button.primary { background: linear-gradient(160deg, #23be5c, #149647); border-color: #149647; color: #f8fffb; box-shadow: 0 8px 18px rgba(23, 163, 74, 0.26); }
+    button.primary:hover { background: linear-gradient(160deg, #2bca67, #129245); }
+    button.blue { background: linear-gradient(160deg, #3b82f6, #2563eb); border-color: #1e40af; color: #eef6ff; box-shadow: 0 8px 18px rgba(37, 99, 235, 0.26); }
+    button.blue:hover { background: linear-gradient(160deg, #4a8ff7, #285ee2); }
+    button.ghost { background: transparent; border-color: transparent; color: #cbd5e1; }
     .topbar {
-      border-bottom: 1px solid var(--border);
-      background: rgba(1, 4, 9, 0.88);
-      backdrop-filter: blur(6px);
-      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      background: linear-gradient(120deg, #0f172a, #111f39);
+      backdrop-filter: blur(14px);
+      padding: 12px 20px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -80,22 +87,24 @@ def render_forge_ui() -> str:
       z-index: 50;
     }
     .logo {
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(140deg, #8957e5, #2f81f7);
+      color: #f8fafc;
+      background: linear-gradient(140deg, #a855f7, #3b82f6);
       font-weight: 700;
-      box-shadow: var(--shadow);
+      box-shadow: 0 10px 24px rgba(91, 77, 255, 0.28);
     }
-    .repo-path { font-size: 15px; font-weight: 700; letter-spacing: .1px; }
+    .repo-path { font-size: 15px; font-weight: 700; letter-spacing: .1px; color: #f8fafc; }
     .topbar .split { flex: 1; }
     .toolbar {
-      border-bottom: 1px solid var(--border);
-      background: var(--panel);
-      padding: 12px 16px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      background: var(--surface);
+      backdrop-filter: blur(10px);
+      padding: 14px 20px;
       display: grid;
       gap: 10px;
       grid-template-columns: 1.9fr 1fr 1fr auto auto;
@@ -104,18 +113,19 @@ def render_forge_ui() -> str:
     .field > span {
       display: block;
       font-size: 11px;
-      color: var(--muted);
+      color: #6b7280;
       margin: 0 0 4px;
       font-weight: 600;
       letter-spacing: .3px;
       text-transform: uppercase;
     }
     .tabs {
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
       display: flex;
       gap: 12px;
-      padding: 0 16px;
-      background: var(--panel);
+      padding: 0 20px;
+      background: var(--surface);
+      backdrop-filter: blur(10px);
     }
     .tab {
       padding: 11px 8px;
@@ -125,36 +135,85 @@ def render_forge_ui() -> str:
       text-decoration: none;
       font-weight: 600;
     }
-    .tab.active { color: var(--text); border-bottom-color: #f78166; }
+    .tab.active { color: #111827; border-bottom-color: #2563eb; }
     .repo-meta {
       display: flex;
       gap: 8px;
-      padding: 10px 16px 2px;
+      padding: 10px 20px 2px;
       color: var(--muted);
       font-size: 12px;
+      flex-wrap: wrap;
     }
     .chip {
       border: 1px solid var(--border);
-      background: #0d1117;
+      background: rgba(255, 255, 255, 0.84);
       border-radius: 999px;
       padding: 3px 9px;
     }
+    .hero {
+      margin: 10px 20px 0;
+      border: 1px solid rgba(255, 255, 255, 0.52);
+      border-radius: 18px;
+      background:
+        linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.48)),
+        radial-gradient(circle at 12% 10%, rgba(37, 99, 235, 0.22), transparent 32%);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-strong);
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1.45fr 1fr;
+      gap: 12px;
+    }
+    .hero h1 {
+      margin: 6px 0 8px;
+      font-size: 24px;
+      color: #0f172a;
+      line-height: 1.15;
+      letter-spacing: -0.4px;
+    }
+    .hero p {
+      margin: 0;
+      color: #475467;
+      line-height: 1.5;
+      font-size: 13px;
+    }
+    .hero-eyebrow {
+      font-size: 11px;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: #475467;
+      font-weight: 700;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .hero-kpi {
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.88);
+      padding: 10px;
+    }
+    .hero-kpi .num { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+    .hero-kpi .txt { font-size: 11px; color: #667085; text-transform: uppercase; }
     .layout {
       display: grid;
       gap: 12px;
-      padding: 12px 16px 16px;
+      padding: 12px 20px 18px;
       grid-template-columns: 260px minmax(580px, 1fr) 320px;
     }
     .card {
-      background: linear-gradient(180deg, var(--panel), #141c26);
-      border: 1px solid var(--border);
-      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      border-radius: 14px;
       padding: 12px;
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(8px);
     }
-    .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .2px; }
-    .label { color: var(--muted); font-size: 12px; margin: 8px 0 4px 0; }
-    .muted { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .2px; color: #0f172a; }
+    .label { color: #667085; font-size: 12px; margin: 8px 0 4px 0; }
+    .muted { color: #64748b; font-size: 12px; line-height: 1.45; }
     .row { display: flex; gap: 8px; }
     .row > * { flex: 1; }
     .pr-stats {
@@ -166,18 +225,18 @@ def render_forge_ui() -> str:
     .stat {
       border: 1px solid var(--border);
       border-radius: 8px;
-      background: #0d1117;
+      background: rgba(255, 255, 255, 0.88);
       padding: 8px;
       text-align: center;
     }
-    .stat .num { font-size: 18px; font-weight: 700; line-height: 1.1; }
-    .stat .txt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .stat .num { font-size: 18px; font-weight: 700; line-height: 1.1; color: #0f172a; }
+    .stat .txt { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .4px; }
     .pr-item {
       border: 1px solid var(--border);
       border-radius: 9px;
       padding: 10px;
       margin-bottom: 8px;
-      background: #0d1117;
+      background: rgba(255, 255, 255, 0.9);
       transition: border-color .15s ease, transform .05s ease;
     }
     .pr-item:hover { border-color: #4b5561; transform: translateY(-1px); }
@@ -206,30 +265,32 @@ def render_forge_ui() -> str:
       max-height: 220px;
       overflow: auto;
       z-index: 9999;
-      border: 1px solid #2ea043;
+      border: 1px solid rgba(16, 185, 129, 0.7);
       border-radius: 10px;
       padding: 8px;
-      background: #0d1f16;
+      background: rgba(6, 28, 23, 0.9);
       color: #b7f7c6;
       font-size: 12px;
       white-space: pre-wrap;
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadow-strong);
     }
     pre {
       margin: 0;
       white-space: pre-wrap;
       max-height: 260px;
       overflow: auto;
-      background: #0d1117;
+      background: rgba(255, 255, 255, 0.84);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px;
       line-height: 1.35;
+      color: #0f172a;
     }
     @media (max-width: 1320px) {
       .layout { grid-template-columns: 1fr; }
       .toolbar { grid-template-columns: 1fr 1fr; }
       #toast { width: min(92vw, 360px); }
+      .hero { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -261,6 +322,19 @@ def render_forge_ui() -> str:
     <span class="chip">Model: Depth-first agent project</span>
     <span class="chip" id="statusFilterLabel">Filter: all pull requests</span>
   </div>
+  <section class="hero">
+    <div>
+      <div class="hero-eyebrow">AgentForge Marketplace Experience</div>
+      <h1>Modern GitHub workflows with premium product polish.</h1>
+      <p>Manage living agent repositories with pull-request rigor, automated checks, maintainers, and release channels in a clean Apple-style control surface.</p>
+    </div>
+    <div class="hero-grid">
+      <div class="hero-kpi"><div class="num" id="heroTotalRepos">1</div><div class="txt">Active repository</div></div>
+      <div class="hero-kpi"><div class="num" id="heroOpenPrs">0</div><div class="txt">Open pull requests</div></div>
+      <div class="hero-kpi"><div class="num" id="heroMergedPrs">0</div><div class="txt">Merged pull requests</div></div>
+      <div class="hero-kpi"><div class="num" id="heroLatestRelease">-</div><div class="txt">Latest stable release</div></div>
+    </div>
+  </section>
 
   <div class="layout">
     <aside class="card">
@@ -444,11 +518,12 @@ def render_forge_ui() -> str:
 
     function renderPullRequests(items) {
       const root = document.getElementById("prList");
-      const totals = { total: 0, pending: 0, merged: 0, rejected: 0 };
+      const totals = { total: 0, pending: 0, evaluated: 0, merged: 0, rejected: 0 };
       (items || []).forEach(function(item) {
         totals.total += 1;
         const status = (item.status || "").toLowerCase();
         if (status === "pending") { totals.pending += 1; }
+        if (status === "evaluated") { totals.evaluated += 1; }
         if (status === "merged") { totals.merged += 1; }
         if (status === "rejected") { totals.rejected += 1; }
       });
@@ -456,6 +531,8 @@ def render_forge_ui() -> str:
       document.getElementById("statPending").textContent = String(totals.pending);
       document.getElementById("statMerged").textContent = String(totals.merged);
       document.getElementById("statRejected").textContent = String(totals.rejected);
+      document.getElementById("heroOpenPrs").textContent = String(totals.pending + totals.evaluated);
+      document.getElementById("heroMergedPrs").textContent = String(totals.merged);
       if (!items || items.length === 0) {
         root.innerHTML = "<div class=\\"muted\\">No pull requests found for this repository.</div>";
         return;
@@ -477,6 +554,8 @@ def render_forge_ui() -> str:
 
     function updateReleaseList(items) {
       document.getElementById("releaseList").textContent = JSON.stringify(items || [], null, 2);
+      const latest = (items && items.length > 0 && items[0].version) ? items[0].version : "-";
+      document.getElementById("heroLatestRelease").textContent = latest;
     }
 
     async function api(method, path, body) {
