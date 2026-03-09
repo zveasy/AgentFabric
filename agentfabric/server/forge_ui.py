@@ -12,42 +12,33 @@ def render_forge_ui() -> str:
   <title>AgentForge Repository</title>
   <style>
     :root {
-      --bg: #f3f5f8;
-      --bg-grad-1: rgba(62, 99, 221, 0.18);
-      --bg-grad-2: rgba(139, 92, 246, 0.16);
-      --surface: rgba(255, 255, 255, 0.72);
-      --surface-strong: rgba(255, 255, 255, 0.9);
-      --surface-dark: #0f1729;
-      --muted: #667085;
-      --border: rgba(15, 23, 42, 0.14);
-      --text: #0f172a;
-      --text-on-dark: #e5e7eb;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --text: #111827;
       --accent: #2563eb;
-      --green: #17a34a;
-      --purple: #7c3aed;
+      --green: #16a34a;
       --red: #dc2626;
-      --ring: rgba(37, 99, 235, 0.24);
-      --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.08);
-      --shadow-strong: 0 18px 48px rgba(15, 23, 42, 0.16);
+      --ring: rgba(37, 99, 235, 0.16);
+      --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.05);
+      --shadow-strong: 0 8px 20px rgba(15, 23, 42, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background:
-        radial-gradient(circle at 20% -10%, var(--bg-grad-1), transparent 30%),
-        radial-gradient(circle at 80% -20%, var(--bg-grad-2), transparent 33%),
-        var(--bg);
-      color: var(--text-on-dark);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       min-height: 100vh;
     }
     input, textarea, select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.9);
-      color: #111827;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
       transition: border-color .15s ease, box-shadow .15s ease;
       font-size: 13px;
     }
@@ -58,26 +49,25 @@ def render_forge_ui() -> str:
     }
     button {
       border: 1px solid var(--border);
-      border-radius: 10px;
-      color: #111827;
-      background: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      color: var(--text);
+      background: var(--surface);
       padding: 9px 12px;
       cursor: pointer;
       font-weight: 600;
       transition: transform .05s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
-      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+      box-shadow: var(--shadow-soft);
     }
-    button:hover { background: #fff; border-color: rgba(15, 23, 42, 0.24); }
+    button:hover { background: #f9fafb; border-color: #d1d5db; }
     button:active { transform: translateY(1px); }
-    button.primary { background: linear-gradient(160deg, #23be5c, #149647); border-color: #149647; color: #f8fffb; box-shadow: 0 8px 18px rgba(23, 163, 74, 0.26); }
-    button.primary:hover { background: linear-gradient(160deg, #2bca67, #129245); }
-    button.blue { background: linear-gradient(160deg, #3b82f6, #2563eb); border-color: #1e40af; color: #eef6ff; box-shadow: 0 8px 18px rgba(37, 99, 235, 0.26); }
-    button.blue:hover { background: linear-gradient(160deg, #4a8ff7, #285ee2); }
-    button.ghost { background: transparent; border-color: transparent; color: #cbd5e1; }
+    button.primary { background: #111827; border-color: #111827; color: #f9fafb; box-shadow: none; }
+    button.primary:hover { background: #1f2937; border-color: #1f2937; }
+    button.blue { background: #2563eb; border-color: #1d4ed8; color: #eff6ff; box-shadow: none; }
+    button.blue:hover { background: #1d4ed8; }
+    button.ghost { background: transparent; border-color: transparent; color: #4b5563; box-shadow: none; }
     .topbar {
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      background: linear-gradient(120deg, #0f172a, #111f39);
-      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
       padding: 12px 20px;
       display: flex;
       align-items: center;
@@ -89,21 +79,21 @@ def render_forge_ui() -> str:
     .logo {
       width: 32px;
       height: 32px;
-      border-radius: 10px;
+      border-radius: 8px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: #f8fafc;
-      background: linear-gradient(140deg, #a855f7, #3b82f6);
+      color: var(--text);
+      background: #f3f4f6;
+      border: 1px solid var(--border);
       font-weight: 700;
-      box-shadow: 0 10px 24px rgba(91, 77, 255, 0.28);
+      box-shadow: none;
     }
-    .repo-path { font-size: 15px; font-weight: 700; letter-spacing: .1px; color: #f8fafc; }
+    .repo-path { font-size: 15px; font-weight: 600; letter-spacing: .1px; color: var(--text); }
     .topbar .split { flex: 1; }
     .toolbar {
-      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      border-bottom: 1px solid var(--border);
       background: var(--surface);
-      backdrop-filter: blur(10px);
       padding: 14px 20px;
       display: grid;
       gap: 10px;
@@ -113,19 +103,18 @@ def render_forge_ui() -> str:
     .field > span {
       display: block;
       font-size: 11px;
-      color: #6b7280;
+      color: var(--muted);
       margin: 0 0 4px;
       font-weight: 600;
       letter-spacing: .3px;
       text-transform: uppercase;
     }
     .tabs {
-      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+      border-bottom: 1px solid var(--border);
       display: flex;
       gap: 12px;
       padding: 0 20px;
       background: var(--surface);
-      backdrop-filter: blur(10px);
     }
     .tab {
       padding: 11px 8px;
@@ -135,7 +124,7 @@ def render_forge_ui() -> str:
       text-decoration: none;
       font-weight: 600;
     }
-    .tab.active { color: #111827; border-bottom-color: #2563eb; }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
     .repo-meta {
       display: flex;
       gap: 8px;
@@ -146,42 +135,39 @@ def render_forge_ui() -> str:
     }
     .chip {
       border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.84);
+      background: var(--surface);
       border-radius: 999px;
       padding: 3px 9px;
     }
     .hero {
       margin: 10px 20px 0;
-      border: 1px solid rgba(255, 255, 255, 0.52);
-      border-radius: 18px;
-      background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.48)),
-        radial-gradient(circle at 12% 10%, rgba(37, 99, 235, 0.22), transparent 32%);
-      backdrop-filter: blur(10px);
-      box-shadow: var(--shadow-strong);
-      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      padding: 14px;
       display: grid;
       grid-template-columns: 1.45fr 1fr;
       gap: 12px;
     }
     .hero h1 {
       margin: 6px 0 8px;
-      font-size: 24px;
-      color: #0f172a;
+      font-size: 22px;
+      color: var(--text);
       line-height: 1.15;
       letter-spacing: -0.4px;
     }
     .hero p {
       margin: 0;
-      color: #475467;
+      color: var(--muted);
       line-height: 1.5;
-      font-size: 13px;
+      font-size: 12px;
     }
     .hero-eyebrow {
       font-size: 11px;
       letter-spacing: .5px;
       text-transform: uppercase;
-      color: #475467;
+      color: var(--muted);
       font-weight: 700;
     }
     .hero-grid {
@@ -190,21 +176,20 @@ def render_forge_ui() -> str:
       gap: 8px;
     }
     .hero-kpi {
-      border: 1px solid rgba(15, 23, 42, 0.1);
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.88);
-      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fafafa;
+      padding: 9px;
     }
-    .hero-kpi .num { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.1; }
-    .hero-kpi .txt { font-size: 11px; color: #667085; text-transform: uppercase; }
+    .hero-kpi .num { font-size: 19px; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .hero-kpi .txt { font-size: 10px; color: var(--muted); text-transform: uppercase; }
     .flow {
       margin: 12px 20px 0;
-      border: 1px solid rgba(255, 255, 255, 0.62);
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
       box-shadow: var(--shadow-soft);
       padding: 12px;
-      backdrop-filter: blur(8px);
     }
     .flow-head {
       display: flex;
@@ -234,10 +219,10 @@ def render_forge_ui() -> str:
     .flow-step {
       flex: 1 0 180px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 10px;
       padding: 8px;
-      background: #f8fafc;
-      color: #475467;
+      background: #fafafa;
+      color: var(--muted);
       font-size: 12px;
       min-height: 56px;
     }
@@ -247,7 +232,7 @@ def render_forge_ui() -> str:
       justify-content: space-between;
       gap: 8px;
       font-size: 12px;
-      color: #0f172a;
+      color: var(--text);
       margin-bottom: 2px;
     }
     .flow-state {
@@ -261,8 +246,8 @@ def render_forge_ui() -> str:
       border: 1px solid rgba(15, 23, 42, 0.14);
     }
     .flow-step.done {
-      border-color: rgba(23, 163, 74, 0.5);
-      background: rgba(236, 253, 243, 0.9);
+      border-color: rgba(22, 163, 74, 0.35);
+      background: rgba(240, 253, 244, 0.9);
     }
     .flow-step.done .flow-state {
       background: rgba(22, 163, 74, 0.14);
@@ -270,9 +255,9 @@ def render_forge_ui() -> str:
       border-color: rgba(22, 163, 74, 0.25);
     }
     .flow-step.active {
-      border-color: rgba(37, 99, 235, 0.5);
-      background: rgba(239, 246, 255, 0.95);
-      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16);
+      border-color: rgba(37, 99, 235, 0.35);
+      background: rgba(239, 246, 255, 0.8);
+      box-shadow: none;
     }
     .flow-step.active .flow-state {
       background: rgba(37, 99, 235, 0.14);
@@ -285,10 +270,10 @@ def render_forge_ui() -> str:
       max-height: 180px;
       overflow: auto;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 8px;
-      background: #0f172a;
-      color: #dbe7ff;
+      background: #f8fafc;
+      color: #334155;
       font-size: 11px;
       line-height: 1.45;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -301,23 +286,22 @@ def render_forge_ui() -> str:
     }
     .card {
       background: var(--surface);
-      border: 1px solid rgba(255, 255, 255, 0.64);
-      border-radius: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
       padding: 12px;
       box-shadow: var(--shadow-soft);
-      backdrop-filter: blur(8px);
     }
-    .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .2px; color: #0f172a; }
+    .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .1px; color: var(--text); }
     .label { color: #667085; font-size: 12px; margin: 8px 0 4px 0; }
     .muted { color: #64748b; font-size: 12px; line-height: 1.45; }
     .helper {
       font-size: 11px;
       color: #64748b;
       margin: 4px 0 8px;
-      padding: 6px 8px;
-      border-radius: 8px;
-      background: rgba(37, 99, 235, 0.06);
-      border: 1px dashed rgba(37, 99, 235, 0.24);
+      padding: 2px 0;
+      border-radius: 0;
+      background: transparent;
+      border: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
     .row { display: flex; gap: 8px; }
@@ -331,18 +315,18 @@ def render_forge_ui() -> str:
     .stat {
       border: 1px solid var(--border);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.88);
+      background: #fafafa;
       padding: 8px;
       text-align: center;
     }
-    .stat .num { font-size: 18px; font-weight: 700; line-height: 1.1; color: #0f172a; }
+    .stat .num { font-size: 18px; font-weight: 700; line-height: 1.1; color: var(--text); }
     .stat .txt { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .4px; }
     .pr-item {
       border: 1px solid var(--border);
       border-radius: 9px;
       padding: 10px;
       margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--surface);
       transition: border-color .15s ease, transform .05s ease;
     }
     .pr-item:hover { border-color: #4b5561; transform: translateY(-1px); }
@@ -350,15 +334,15 @@ def render_forge_ui() -> str:
     .badge {
       padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase;
     }
-    .badge.pending { background: #9e6a0333; color: #f2cc60; }
-    .badge.evaluated { background: #1f6feb33; color: #79c0ff; }
-    .badge.merged { background: #23863633; color: #3fb950; }
-    .badge.rejected { background: #da363333; color: #ff7b72; }
+    .badge.pending { background: #fffbeb; color: #92400e; }
+    .badge.evaluated { background: #eff6ff; color: #1d4ed8; }
+    .badge.merged { background: #f0fdf4; color: #166534; }
+    .badge.rejected { background: #fef2f2; color: #991b1b; }
     .activity {
-      max-height: 420px; overflow: auto; background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+      max-height: 420px; overflow: auto; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
     }
     .event {
-      border-left: 2px solid var(--border); padding: 8px 8px 8px 10px; margin: 6px 0; font-size: 12px;
+      border-left: 2px solid var(--border); padding: 8px 8px 8px 10px; margin: 6px 0; font-size: 12px; color: #334155;
       white-space: pre-wrap;
     }
     .event.ok { border-color: var(--green); }
@@ -371,21 +355,21 @@ def render_forge_ui() -> str:
       max-height: 220px;
       overflow: auto;
       z-index: 9999;
-      border: 1px solid rgba(16, 185, 129, 0.7);
-      border-radius: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
       padding: 8px;
-      background: rgba(6, 28, 23, 0.9);
-      color: #b7f7c6;
+      background: var(--surface);
+      color: var(--text);
       font-size: 12px;
       white-space: pre-wrap;
-      box-shadow: var(--shadow-strong);
+      box-shadow: var(--shadow-soft);
     }
     pre {
       margin: 0;
       white-space: pre-wrap;
       max-height: 260px;
       overflow: auto;
-      background: rgba(255, 255, 255, 0.84);
+      background: #f8fafc;
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px;
@@ -430,9 +414,9 @@ def render_forge_ui() -> str:
   </div>
   <section class="hero">
     <div>
-      <div class="hero-eyebrow">AgentForge Marketplace Experience</div>
-      <h1>Modern GitHub workflows with premium product polish.</h1>
-      <p>Manage living agent repositories with pull-request rigor, automated checks, maintainers, and release channels in a clean Apple-style control surface.</p>
+      <div class="hero-eyebrow">AgentForge</div>
+      <h1>Clean pull-request workflow for agent projects.</h1>
+      <p>Branch, submit, evaluate, merge, and confirm release with minimal UI noise.</p>
     </div>
     <div class="hero-grid">
       <div class="hero-kpi"><div class="num" id="heroTotalRepos">1</div><div class="txt">Active repository</div></div>
