@@ -180,3 +180,8 @@ class ReviewContributionRequest(BaseModel):
     decision_notes: str = ""
     release_version: Optional[str] = None
     release_channel: str = "stable"
+
+
+class ListContributionsResponse(BaseModel):
+    items: list[dict]
+    total: int

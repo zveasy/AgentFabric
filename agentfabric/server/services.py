@@ -627,6 +627,32 @@ class AgentProjectService:
             output.append(self._serialize_release(row))
         return output
 
+    def list_contributions(
+        self,
+        *,
+        namespace: str,
+        project_id: str,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        if limit < 1 or limit > 200:
+            raise ValidationError("limit must be between 1 and 200")
+        project = self.get_project(namespace=namespace, project_id=project_id)
+        stmt = (
+            select(ProjectContribution)
+            .where(ProjectContribution.project_ref_id == project.id)
+            .order_by(ProjectContribution.created_at.desc())
+            .limit(limit)
+        )
+        rows = self.db.execute(stmt).scalars().all()
+        normalized_status = status.strip().lower() if status else None
+        items = []
+        for row in rows:
+            if normalized_status and row.status != normalized_status:
+                continue
+            items.append(self._serialize_contribution(row))
+        return {"items": items, "total": len(items)}
+
     def _require_maintainer(self, project_ref_id: int, principal_id: str) -> None:
         row = self.db.execute(
             select(ProjectMaintainer).where(
@@ -703,4 +729,23 @@ class AgentProjectService:
             "changelog": release.changelog,
             "created_by": release.created_by,
             "created_at": release.created_at.isoformat(),
+        }
+
+    def _serialize_contribution(self, contribution: ProjectContribution) -> dict[str, Any]:
+        evaluation = json.loads(contribution.evaluation_json or "{}")
+        return {
+            "contribution_id": contribution.id,
+            "branch_name": contribution.branch_name,
+            "title": contribution.title,
+            "summary": contribution.summary,
+            "contribution_zone": contribution.contribution_zone,
+            "status": contribution.status,
+            "submitter_id": contribution.submitter_id,
+            "reviewer_id": contribution.reviewer_id,
+            "decision_notes": contribution.decision_notes,
+            "merged_release_version": contribution.merged_release_version,
+            "evaluation_gate_passed": evaluation.get("gate_passed"),
+            "evaluation_score": evaluation.get("evaluation_score"),
+            "created_at": contribution.created_at.isoformat(),
+            "decided_at": contribution.decided_at.isoformat() if contribution.decided_at else None,
         }

@@ -7,7 +7,7 @@ import shutil
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -30,6 +30,7 @@ from agentfabric.server.schemas import (
     InvoiceResponse,
     IssueTokenRequest,
     ListAgentProjectsResponse,
+    ListContributionsResponse,
     ListPackagesResponse,
     PackageResponse,
     PublishPackageRequest,
@@ -53,6 +54,7 @@ from agentfabric.server.services import (
     ReviewService,
 )
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
+from agentfabric.server.forge_ui import render_forge_ui
 
 
 def choose_queue_backend(settings: Settings):
@@ -125,6 +127,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "/openapi.json",
             "/docs",
             "/redoc",
+            "/forge",
         }:
             return await call_next(request)
         try:
@@ -160,9 +163,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "service": "AgentFabric",
             "message": "API is running. Open /docs for interactive API documentation.",
             "docs": "/docs",
+            "forge": "/forge",
             "health": "/health",
             "openapi": "/openapi.json",
         }
+
+    @app.get("/forge", response_class=HTMLResponse, include_in_schema=False)
+    def forge_interface():
+        return render_forge_ui()
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon():
@@ -368,6 +376,19 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             regressions=payload.regressions,
         )
         return ContributionResponse(contribution_id=contribution.id, status=contribution.status)
+
+    @app.get("/projects/{namespace}/{project_id}/contributions", response_model=ListContributionsResponse, tags=["projects"])
+    def list_contributions(
+        namespace: str,
+        project_id: str,
+        request: Request,
+        status: Optional[str] = None,
+        limit: int = 50,
+        db: Session = Depends(get_db),
+    ):
+        require_scopes(request, ["projects.read"])
+        project_svc = AgentProjectService(db)
+        return project_svc.list_contributions(namespace=namespace, project_id=project_id, status=status, limit=limit)
 
     @app.post("/projects/{namespace}/{project_id}/contributions/{contribution_id}/evaluate", tags=["projects"])
     def evaluate_contribution(

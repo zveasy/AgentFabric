@@ -71,6 +71,9 @@ class ServerApiStackTests(unittest.TestCase):
 
         unauthorized = self.client.get("/registry/list")
         self.assertEqual(unauthorized.status_code, 401)
+        forge = self.client.get("/forge")
+        self.assertEqual(forge.status_code, 200)
+        self.assertIn("AgentForge", forge.text)
 
         payload = "print('hello')"
         signature = hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -196,6 +199,10 @@ class ServerApiStackTests(unittest.TestCase):
         )
         self.assertEqual(submit_contribution.status_code, 200)
         contribution_id = submit_contribution.json()["contribution_id"]
+        pending_contributions = self.client.get("/projects/dev-a/research-agent/contributions", headers=headers)
+        self.assertEqual(pending_contributions.status_code, 200)
+        self.assertGreaterEqual(pending_contributions.json()["total"], 1)
+        self.assertEqual(pending_contributions.json()["items"][0]["contribution_id"], contribution_id)
 
         evaluate = self.client.post(
             f"/projects/dev-a/research-agent/contributions/{contribution_id}/evaluate",
@@ -248,6 +255,13 @@ class ServerApiStackTests(unittest.TestCase):
         )
         self.assertEqual(evaluate_failing.status_code, 200)
         self.assertFalse(evaluate_failing.json()["gate_passed"])
+        rejected = self.client.get(
+            "/projects/dev-a/research-agent/contributions",
+            params={"status": "rejected"},
+            headers=headers,
+        )
+        self.assertEqual(rejected.status_code, 200)
+        self.assertEqual(rejected.json()["items"][0]["contribution_id"], failing_id)
 
         denied_merge = self.client.post(
             f"/projects/dev-a/research-agent/contributions/{failing_id}/review",

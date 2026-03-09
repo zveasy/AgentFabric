@@ -37,6 +37,7 @@ Each project includes:
 - Contribution manifests with measurable improvement data.
 - Automated evaluation gates for quality/regression checks.
 - Release channels: `stable`, `beta`, `nightly`, `enterprise-certified`.
+- Browser interface at `/forge` for interactive project operations.
 
 Meaningful merges are enforced by policy: contributions must show measurable upside (for example accuracy/reliability/domain coverage) without unacceptable latency/cost/safety regressions.
 

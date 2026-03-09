@@ -22,7 +22,8 @@ The FastAPI server (`agentfabric.server`) provides:
 - **Agent Projects (AgentForge):**
   - `POST /projects`, `GET /projects`, `GET /projects/{namespace}/{project_id}`
   - `POST /projects/{namespace}/{project_id}/maintainers`, `POST /projects/{namespace}/{project_id}/branches`
-  - `POST /projects/{namespace}/{project_id}/contributions`
+  - `POST /projects/{namespace}/{project_id}/contributions`, `GET /projects/{namespace}/{project_id}/contributions`
   - `POST /projects/{namespace}/{project_id}/contributions/{id}/evaluate`
   - `POST /projects/{namespace}/{project_id}/contributions/{id}/review`
   - `GET /projects/{namespace}/{project_id}/releases`
+- **Forge UI:** `GET /forge` (browser interface for project/branch/contribution/eval/release workflow)
