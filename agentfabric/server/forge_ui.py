@@ -12,8 +12,10 @@ def render_forge_ui() -> str:
   <title>AgentForge Repository</title>
   <style>
     :root {
-      --bg: #0d1117;
+      --bg: #0b0f14;
+      --bg-elevated: #111827;
       --panel: #161b22;
+      --panel-soft: #1c2430;
       --muted: #8b949e;
       --border: #30363d;
       --text: #e6edf3;
@@ -21,58 +23,164 @@ def render_forge_ui() -> str:
       --green: #238636;
       --purple: #8957e5;
       --red: #da3633;
+      --shadow: 0 8px 24px rgba(1, 4, 9, 0.28);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: Arial, sans-serif; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 20% -10%, rgba(56, 139, 253, 0.15), transparent 28%),
+        radial-gradient(circle at 80% -20%, rgba(137, 87, 229, 0.16), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+    }
     input, textarea, select {
-      width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
-      background: #0b0f14; color: var(--text);
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #0b0f14;
+      color: var(--text);
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #2f81f7;
+      box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.25);
     }
     button {
-      border: 1px solid var(--border); border-radius: 6px; color: var(--text);
-      background: #21262d; padding: 8px 10px; cursor: pointer; font-weight: 600;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      background: #21262d;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform .05s ease, background .15s ease, border-color .15s ease;
     }
+    button:hover { background: #2a3038; border-color: #3a414b; }
+    button:active { transform: translateY(1px); }
     button.primary { background: var(--green); border-color: #2ea043; }
+    button.primary:hover { background: #2ea043; }
     button.blue { background: var(--accent); border-color: #1f6feb; }
+    button.blue:hover { background: #2a7df7; }
     button.ghost { background: transparent; }
     .topbar {
-      border-bottom: 1px solid var(--border); background: #010409;
-      padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(1, 4, 9, 0.88);
+      backdrop-filter: blur(6px);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
     .logo {
-      width: 28px; height: 28px; border-radius: 50%; display: inline-flex;
-      align-items: center; justify-content: center; background: var(--purple); font-weight: 700;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(140deg, #8957e5, #2f81f7);
+      font-weight: 700;
+      box-shadow: var(--shadow);
     }
-    .repo-path { font-size: 15px; font-weight: 700; }
+    .repo-path { font-size: 15px; font-weight: 700; letter-spacing: .1px; }
     .topbar .split { flex: 1; }
     .toolbar {
-      border-bottom: 1px solid var(--border); background: var(--panel);
-      padding: 10px 16px; display: grid; gap: 10px; grid-template-columns: 1.6fr 1fr 1fr auto auto;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      padding: 12px 16px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1.9fr 1fr 1fr auto auto;
+      align-items: end;
+    }
+    .field > span {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin: 0 0 4px;
+      font-weight: 600;
+      letter-spacing: .3px;
+      text-transform: uppercase;
     }
     .tabs {
-      border-bottom: 1px solid var(--border); display: flex; gap: 12px;
-      padding: 0 16px; background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--panel);
     }
     .tab {
-      padding: 10px 6px; color: var(--muted); border-bottom: 2px solid transparent;
-      font-size: 14px; text-decoration: none;
+      padding: 11px 8px;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      font-size: 14px;
+      text-decoration: none;
+      font-weight: 600;
     }
     .tab.active { color: var(--text); border-bottom-color: #f78166; }
+    .repo-meta {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .chip {
+      border: 1px solid var(--border);
+      background: #0d1117;
+      border-radius: 999px;
+      padding: 3px 9px;
+    }
     .layout {
-      display: grid; gap: 12px; padding: 12px 16px;
+      display: grid;
+      gap: 12px;
+      padding: 12px 16px 16px;
       grid-template-columns: 260px minmax(580px, 1fr) 320px;
     }
     .card {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+      background: linear-gradient(180deg, var(--panel), #141c26);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: var(--shadow);
     }
-    .card h3 { margin: 0 0 10px 0; font-size: 15px; }
+    .card h3 { margin: 0 0 10px 0; font-size: 15px; letter-spacing: .2px; }
     .label { color: var(--muted); font-size: 12px; margin: 8px 0 4px 0; }
-    .muted { color: var(--muted); font-size: 12px; }
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.45; }
     .row { display: flex; gap: 8px; }
     .row > * { flex: 1; }
-    .pr-item {
-      border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #0d1117;
+    .pr-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
     }
+    .stat {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0d1117;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat .num { font-size: 18px; font-weight: 700; line-height: 1.1; }
+    .stat .txt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .pr-item {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #0d1117;
+      transition: border-color .15s ease, transform .05s ease;
+    }
+    .pr-item:hover { border-color: #4b5561; transform: translateY(-1px); }
     .pr-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     .badge {
       padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase;
@@ -91,11 +199,38 @@ def render_forge_ui() -> str:
     .event.ok { border-color: var(--green); }
     .event.err { border-color: var(--red); }
     #toast {
-      position: fixed; top: 10px; right: 10px; width: 360px; max-height: 220px; overflow: auto;
-      z-index: 9999; border: 1px solid #2ea043; border-radius: 8px; padding: 8px; background: #0d1f16; color: #b7f7c6;
-      font-size: 12px; white-space: pre-wrap;
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 360px;
+      max-height: 220px;
+      overflow: auto;
+      z-index: 9999;
+      border: 1px solid #2ea043;
+      border-radius: 10px;
+      padding: 8px;
+      background: #0d1f16;
+      color: #b7f7c6;
+      font-size: 12px;
+      white-space: pre-wrap;
+      box-shadow: var(--shadow);
     }
-    pre { margin: 0; white-space: pre-wrap; max-height: 260px; overflow: auto; background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      max-height: 260px;
+      overflow: auto;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      line-height: 1.35;
+    }
+    @media (max-width: 1320px) {
+      .layout { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr 1fr; }
+      #toast { width: min(92vw, 360px); }
+    }
   </style>
 </head>
 <body>
@@ -107,9 +242,9 @@ def render_forge_ui() -> str:
     <button class="ghost" id="reloadWorkspace">Sync workspace</button>
   </div>
   <div class="toolbar">
-    <input id="token" placeholder="Bearer token (POST /auth/token/issue)" />
-    <input id="namespace" value="dev-a" placeholder="namespace" />
-    <input id="projectId" value="research-agent" placeholder="project id" />
+    <label class="field"><span>Auth token</span><input id="token" placeholder="Bearer token (POST /auth/token/issue)" /></label>
+    <label class="field"><span>Namespace</span><input id="namespace" value="dev-a" placeholder="namespace" /></label>
+    <label class="field"><span>Repository</span><input id="projectId" value="research-agent" placeholder="project id" /></label>
     <button id="listProjects">Browse repos</button>
     <button id="loadWorkspace">Open repo</button>
   </div>
@@ -119,6 +254,12 @@ def render_forge_ui() -> str:
     <a class="tab" href="#">Branches</a>
     <a class="tab" href="#">Releases</a>
     <a class="tab" href="#">Settings</a>
+  </div>
+  <div class="repo-meta">
+    <span class="chip">Visibility: Internal</span>
+    <span class="chip">Main branch: main</span>
+    <span class="chip">Model: Depth-first agent project</span>
+    <span class="chip" id="statusFilterLabel">Filter: all pull requests</span>
   </div>
 
   <div class="layout">
@@ -150,6 +291,12 @@ def render_forge_ui() -> str:
     <section>
       <div class="card">
         <h3>Pull requests (contributions)</h3>
+        <div class="pr-stats">
+          <div class="stat"><div id="statTotal" class="num">0</div><div class="txt">Total</div></div>
+          <div class="stat"><div id="statPending" class="num">0</div><div class="txt">Pending</div></div>
+          <div class="stat"><div id="statMerged" class="num">0</div><div class="txt">Merged</div></div>
+          <div class="stat"><div id="statRejected" class="num">0</div><div class="txt">Rejected</div></div>
+        </div>
         <div class="row">
           <button id="refreshPrs">Refresh pull requests</button>
           <button id="filterRejected">Show rejected only</button>
@@ -297,6 +444,18 @@ def render_forge_ui() -> str:
 
     function renderPullRequests(items) {
       const root = document.getElementById("prList");
+      const totals = { total: 0, pending: 0, merged: 0, rejected: 0 };
+      (items || []).forEach(function(item) {
+        totals.total += 1;
+        const status = (item.status || "").toLowerCase();
+        if (status === "pending") { totals.pending += 1; }
+        if (status === "merged") { totals.merged += 1; }
+        if (status === "rejected") { totals.rejected += 1; }
+      });
+      document.getElementById("statTotal").textContent = String(totals.total);
+      document.getElementById("statPending").textContent = String(totals.pending);
+      document.getElementById("statMerged").textContent = String(totals.merged);
+      document.getElementById("statRejected").textContent = String(totals.rejected);
       if (!items || items.length === 0) {
         root.innerHTML = "<div class=\\"muted\\">No pull requests found for this repository.</div>";
         return;
@@ -510,6 +669,18 @@ def render_forge_ui() -> str:
     document.getElementById("listReleases").onclick = refreshReleases;
     document.getElementById("filterRejected").onclick = function() { state.statusFilter = "rejected"; refreshPullRequests(); };
     document.getElementById("clearFilter").onclick = function() { state.statusFilter = null; refreshPullRequests(); };
+
+    const originalRefreshPullRequests = refreshPullRequests;
+    refreshPullRequests = async function() {
+      document.getElementById("statusFilterLabel").textContent = "Filter: " + (state.statusFilter || "all pull requests");
+      await originalRefreshPullRequests();
+    };
+
+    const originalLoadWorkspace = loadWorkspace;
+    loadWorkspace = async function() {
+      document.getElementById("statusFilterLabel").textContent = "Filter: " + (state.statusFilter || "all pull requests");
+      await originalLoadWorkspace();
+    };
 
     updateRepoHeader();
   </script>
