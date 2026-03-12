@@ -19,7 +19,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/your-org/agentfabric:latest
+          image: ghcr.io/zveasy/agentfabric:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

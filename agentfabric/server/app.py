@@ -11,6 +11,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from agentfabric.errors import AgentFabricError, AuthorizationError, ConflictError, NotFoundError, ValidationError
+from agentfabric.phase2.models import Rating
+from agentfabric.production.control_plane import ProductionControlPlane
 from agentfabric.server.auth import AuthService, require_scopes
 from agentfabric.server.config import Settings, get_settings
 from agentfabric.server.database import build_session_factory, run_migrations
@@ -69,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.auto_migrate:
         run_migrations(settings.database_url)
     session_factory, _ = build_session_factory(settings)
+    control_plane = ProductionControlPlane(db_path=settings.production_db_path)
     auth = AuthService(settings)
     queue_backend = choose_queue_backend(settings)
     signing_verifier = choose_signing_verifier(settings)
@@ -84,6 +88,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="AgentFabric production API with Postgres/migrations queue auth and billing integrations.",
         lifespan=lifespan,
     )
+
+    @app.exception_handler(AuthorizationError)
+    async def _handle_authz_error(_: Request, exc: AuthorizationError):
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(NotFoundError)
+    async def _handle_not_found(_: Request, exc: NotFoundError):
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(ConflictError)
+    async def _handle_conflict(_: Request, exc: ConflictError):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(ValidationError)
+    async def _handle_validation(_: Request, exc: ValidationError):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(AgentFabricError)
+    async def _handle_agentfabric(_: Request, exc: AgentFabricError):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     def get_db():
         db = session_factory()
@@ -320,6 +344,162 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def metrics(request: Request):
         require_scopes(request, ["metrics.read"])
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    @app.get("/runtime/agents", tags=["runtime"])
+    def runtime_agents(request: Request):
+        require_scopes(request, ["runtime.read"])
+        return {"items": control_plane.runtime_agents()}
+
+    @app.post("/runtime/install", tags=["runtime"])
+    def runtime_install(payload: dict, request: Request):
+        require_scopes(request, ["runtime.install"])
+        agent_id = control_plane.install_runtime_agent(
+            manifest=payload["manifest"],
+            payload=payload["payload"].encode("utf-8"),
+            signer_id=payload["signer_id"],
+            signer_key=payload["signer_key"],
+            signature=payload["signature"],
+        )
+        return {"agent_id": agent_id}
+
+    @app.post("/runtime/load", tags=["runtime"])
+    def runtime_load(payload: dict, request: Request):
+        require_scopes(request, ["runtime.run"])
+        control_plane.runtime_load(payload["agent_id"])
+        return {"status": "loaded"}
+
+    @app.post("/runtime/run", tags=["runtime"])
+    def runtime_run(payload: dict, request: Request):
+        require_scopes(request, ["runtime.run"])
+        return control_plane.runtime_run(
+            agent_id=payload["agent_id"],
+            request=payload["request"],
+            user_id=payload["user_id"],
+            session_id=payload["session_id"],
+        )
+
+    @app.post("/runtime/suspend", tags=["runtime"])
+    def runtime_suspend(payload: dict, request: Request):
+        require_scopes(request, ["runtime.run"])
+        control_plane.runtime_suspend(payload["agent_id"])
+        return {"status": "suspended"}
+
+    @app.post("/runtime/uninstall", tags=["runtime"])
+    def runtime_uninstall(payload: dict, request: Request):
+        require_scopes(request, ["runtime.install"])
+        control_plane.runtime_uninstall(payload["agent_id"])
+        return {"status": "uninstalled"}
+
+    @app.post("/enterprise/rbac/assign", tags=["enterprise"])
+    def enterprise_rbac_assign(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.rbac.write"])
+        control_plane.assign_role(payload["principal_id"], payload["role"])
+        return {"status": "ok"}
+
+    @app.post("/enterprise/rbac/check", tags=["enterprise"])
+    def enterprise_rbac_check(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.rbac.read"])
+        control_plane.check_permission(payload["principal_id"], payload["permission"])
+        return {"allowed": True}
+
+    @app.post("/enterprise/namespace/create", tags=["enterprise"])
+    def enterprise_namespace_create(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload["owner_tenant_id"])
+        control_plane.create_namespace(payload["owner_tenant_id"], payload["namespace"])
+        return {"status": "created"}
+
+    @app.post("/enterprise/namespace/grant", tags=["enterprise"])
+    def enterprise_namespace_grant(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload["owner_tenant_id"])
+        control_plane.grant_namespace_access(
+            payload["owner_tenant_id"],
+            payload["namespace"],
+            payload["target_tenant_id"],
+        )
+        return {"status": "granted"}
+
+    @app.post("/enterprise/namespace/check", tags=["enterprise"])
+    def enterprise_namespace_check(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.namespace.read"], tenant_id=payload["tenant_id"])
+        control_plane.check_namespace_access(payload["tenant_id"], payload["namespace"])
+        return {"allowed": True}
+
+    @app.post("/enterprise/audit/append", tags=["enterprise"])
+    def enterprise_audit_append(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.audit.write"])
+        return control_plane.append_audit(
+            actor_id=payload["actor_id"],
+            action=payload["action"],
+            target=payload["target"],
+            metadata=payload.get("metadata", {}),
+        )
+
+    @app.post("/enterprise/audit/export", tags=["enterprise"])
+    def enterprise_audit_export(payload: dict, request: Request):
+        require_scopes(request, ["enterprise.audit.read"])
+        path = control_plane.export_siem_audit(payload["output_file"])
+        return {"path": path}
+
+    @app.post("/reviews/submit", tags=["reviews"])
+    def reviews_submit(payload: dict, request: Request):
+        require_scopes(request, ["reviews.write"], tenant_id=payload["tenant_id"])
+        review_id = control_plane.submit_review(
+            Rating(
+                tenant_id=payload["tenant_id"],
+                package_fqid=payload["package_fqid"],
+                user_id=payload["user_id"],
+                stars=int(payload["stars"]),
+                review=payload["review"],
+            )
+        )
+        return {"review_id": review_id}
+
+    @app.post("/reviews/moderation/pending", tags=["reviews"])
+    def reviews_pending(request: Request):
+        require_scopes(request, ["reviews.moderate"])
+        return {"items": control_plane.pending_reviews()}
+
+    @app.post("/reviews/moderation/resolve", tags=["reviews"])
+    def reviews_resolve(payload: dict, request: Request):
+        require_scopes(request, ["reviews.moderate"])
+        control_plane.moderate_review(int(payload["review_id"]), approved=bool(payload["approved"]))
+        return {"status": "ok"}
+
+    @app.post("/compliance/gdpr/request", tags=["compliance"])
+    def gdpr_request(payload: dict, request: Request):
+        require_scopes(request, ["compliance.gdpr.write"], tenant_id=payload["tenant_id"])
+        request_id = control_plane.request_gdpr_deletion(
+            tenant_id=payload["tenant_id"],
+            user_id=payload.get("user_id"),
+            reason=payload["reason"],
+        )
+        return {"request_id": request_id}
+
+    @app.post("/compliance/gdpr/process", tags=["compliance"])
+    def gdpr_process(request: Request):
+        require_scopes(request, ["compliance.gdpr.write"])
+        return {"processed": control_plane.process_gdpr_deletions()}
+
+    @app.post("/compliance/legal/publish", tags=["compliance"])
+    def legal_publish(payload: dict, request: Request):
+        require_scopes(request, ["compliance.legal.write"])
+        control_plane.publish_legal_document(
+            payload["doc_type"],
+            payload["version"],
+            payload["content"],
+        )
+        return {"status": "ok"}
+
+    @app.post("/compliance/legal/accept", tags=["compliance"])
+    def legal_accept(payload: dict, request: Request):
+        require_scopes(request, ["compliance.legal.read"])
+        return control_plane.accept_legal_document(payload["doc_type"], payload["principal_id"])
+
+    @app.post("/ops/backup", tags=["ops"])
+    def ops_backup(request: Request):
+        require_scopes(request, ["ops.backup.write"])
+        backup = control_plane.create_backup()
+        return {"backup_file": backup}
 
     @app.post("/audit/append", tags=["audit"])
     def append_audit(actor_id: str, action: str, target: str, metadata: dict | None, request: Request, db: Session = Depends(get_db)):

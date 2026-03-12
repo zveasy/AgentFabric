@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "AgentFabric API"
     environment: str = "development"
     database_url: str = "sqlite:///./agentfabric_api.db"
+    production_db_path: str = "agentfabric.db"
     redis_url: str = "redis://localhost:6379/0"
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"

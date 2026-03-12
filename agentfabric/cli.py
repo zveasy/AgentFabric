@@ -100,6 +100,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     api_run = sub.add_parser("api-run", help="run FastAPI server")
     api_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
+    api_run.add_argument("--production-db-path", default="agentfabric.db")
     api_run.add_argument("--redis-url", default="redis://localhost:6379/0")
     api_run.add_argument("--jwt-secret", default="change-me-in-production")
     api_run.add_argument("--bootstrap-token")
@@ -337,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         db_path = Path(args.db_path)
         database_url = f"sqlite:///{db_path}" if db_path.is_absolute() else f"sqlite:///./{db_path}"
         os.environ["AGENTFABRIC_DATABASE_URL"] = database_url
+        os.environ["AGENTFABRIC_PRODUCTION_DB_PATH"] = str(db_path)
         os.environ["AGENTFABRIC_AUTO_MIGRATE"] = "true"
         settings = Settings()
         app = create_app(settings)
@@ -352,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "api-run":
         os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
+        os.environ["AGENTFABRIC_PRODUCTION_DB_PATH"] = args.production_db_path
         os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
         os.environ["AGENTFABRIC_JWT_SECRET"] = args.jwt_secret
         os.environ["AGENTFABRIC_STRICT_SIGNING"] = "true" if args.strict_signing else "false"
