@@ -17,7 +17,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_ttl_seconds: int = 3600
+    bootstrap_token: str | None = None
+    strict_signing: bool = False
+    auto_migrate: bool = True
+    queue_max_attempts: int = 3
     stripe_api_key: str | None = None
+    stripe_webhook_secret: str | None = None
 
 
 @lru_cache(maxsize=1)

@@ -26,6 +26,8 @@ services:
       AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres:5432/agentfabric
       AGENTFABRIC_REDIS_URL: redis://redis:6379/0
       AGENTFABRIC_JWT_SECRET: change-me
+      AGENTFABRIC_BOOTSTRAP_TOKEN: bootstrap-local
+      AGENTFABRIC_QUEUE_MAX_ATTEMPTS: 3
     ports:
       - "8000:8000"
     command: >
@@ -40,6 +42,7 @@ services:
     environment:
       AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres:5432/agentfabric
       AGENTFABRIC_REDIS_URL: redis://redis:6379/0
+      AGENTFABRIC_QUEUE_MAX_ATTEMPTS: 3
     command: >
       python -m agentfabric.cli worker-run --database-url $$AGENTFABRIC_DATABASE_URL --redis-url $$AGENTFABRIC_REDIS_URL --queue-name default
 

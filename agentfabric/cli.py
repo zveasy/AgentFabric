@@ -19,7 +19,6 @@ import uvicorn
 from agentfabric.phase1.sdk import Agent
 from agentfabric.phase2.models import MeterEvent, PackageUpload
 from agentfabric.platform import AgentFabricPlatform
-from agentfabric.production.api import ProductionApiServer
 from agentfabric.production.control_plane import ProductionControlPlane
 from agentfabric.server.app import create_app
 from agentfabric.server.config import Settings
@@ -57,7 +56,7 @@ def _build_parser() -> argparse.ArgumentParser:
     uninstall = sub.add_parser("uninstall", help="uninstall runtime agent")
     uninstall.add_argument("--agent-id", required=True)
 
-    runtime_list = sub.add_parser("agent-list", help="list runtime-installed agents")
+    sub.add_parser("agent-list", help="list runtime-installed agents")
 
     publish = sub.add_parser("publish", help="publish an agent package")
     publish.add_argument("--developer", required=True)
@@ -91,7 +90,7 @@ def _build_parser() -> argparse.ArgumentParser:
     prod_token.add_argument("--principal", required=True)
     prod_token.add_argument("--ttl-seconds", type=int, default=3600)
 
-    prod_api = sub.add_parser("prod-api", help="run production HTTP API server")
+    prod_api = sub.add_parser("prod-api", help="deprecated alias for api-run (sqlite db-path)")
     prod_api.add_argument("--db-path", default="agentfabric.db")
     prod_api.add_argument("--host", default="127.0.0.1")
     prod_api.add_argument("--port", type=int, default=8080)
@@ -103,7 +102,12 @@ def _build_parser() -> argparse.ArgumentParser:
     api_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
     api_run.add_argument("--redis-url", default="redis://localhost:6379/0")
     api_run.add_argument("--jwt-secret", default="change-me-in-production")
+    api_run.add_argument("--bootstrap-token")
+    api_run.add_argument("--strict-signing", action="store_true")
+    api_run.add_argument("--disable-auto-migrate", action="store_true")
+    api_run.add_argument("--queue-max-attempts", type=int, default=3)
     api_run.add_argument("--stripe-api-key")
+    api_run.add_argument("--stripe-webhook-secret")
     api_run.add_argument("--host", default="127.0.0.1")
     api_run.add_argument("--port", type=int, default=8000)
 
@@ -111,6 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     worker_run.add_argument("--database-url", default="sqlite:///./agentfabric_api.db")
     worker_run.add_argument("--redis-url", default="redis://localhost:6379/0")
     worker_run.add_argument("--queue-name", default="default")
+    worker_run.add_argument("--queue-max-attempts", type=int, default=3)
     worker_run.add_argument("--poll-interval-seconds", type=float, default=0.5)
     return parser
 
@@ -329,8 +334,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "prod-api":
-        cp = ProductionControlPlane(db_path=args.db_path)
-        ProductionApiServer(cp).run(host=args.host, port=args.port)
+        db_path = Path(args.db_path)
+        database_url = f"sqlite:///{db_path}" if db_path.is_absolute() else f"sqlite:///./{db_path}"
+        os.environ["AGENTFABRIC_DATABASE_URL"] = database_url
+        os.environ["AGENTFABRIC_AUTO_MIGRATE"] = "true"
+        settings = Settings()
+        app = create_app(settings)
+        uvicorn.run(app, host=args.host, port=args.port)
         return 0
 
     if args.command == "db-migrate":
@@ -344,8 +354,15 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
         os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
         os.environ["AGENTFABRIC_JWT_SECRET"] = args.jwt_secret
+        os.environ["AGENTFABRIC_STRICT_SIGNING"] = "true" if args.strict_signing else "false"
+        os.environ["AGENTFABRIC_AUTO_MIGRATE"] = "false" if args.disable_auto_migrate else "true"
+        os.environ["AGENTFABRIC_QUEUE_MAX_ATTEMPTS"] = str(args.queue_max_attempts)
+        if args.bootstrap_token:
+            os.environ["AGENTFABRIC_BOOTSTRAP_TOKEN"] = args.bootstrap_token
         if args.stripe_api_key:
             os.environ["AGENTFABRIC_STRIPE_API_KEY"] = args.stripe_api_key
+        if args.stripe_webhook_secret:
+            os.environ["AGENTFABRIC_STRIPE_WEBHOOK_SECRET"] = args.stripe_webhook_secret
         settings = Settings()
         app = create_app(settings)
         uvicorn.run(app, host=args.host, port=args.port)
@@ -356,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
 
         os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
         os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
+        os.environ["AGENTFABRIC_QUEUE_MAX_ATTEMPTS"] = str(args.queue_max_attempts)
         settings = Settings()
         run_worker(
             settings=settings,

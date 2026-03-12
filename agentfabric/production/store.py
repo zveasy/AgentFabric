@@ -10,7 +10,7 @@ from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 
-from agentfabric.errors import AuthorizationError, ConflictError, NotFoundError, ValidationError
+from agentfabric.errors import AuthorizationError, ConflictError, NotFoundError
 from agentfabric.phase2.models import AgentPackage, InstallRecord, MeterEvent, Rating
 from agentfabric.production.db import SqliteStore, utc_now_iso
 

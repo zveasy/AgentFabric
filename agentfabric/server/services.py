@@ -14,7 +14,7 @@ from agentfabric.errors import ConflictError, NotFoundError, ValidationError
 from agentfabric.server.models import AuditEvent, BillingEvent, Install, InvoiceLine, Package, PaymentRecord
 from agentfabric.server.payments import MockPaymentProcessor, PaymentProcessor
 from agentfabric.server.queue import QueueBackend, QueueItem, SqlQueueStore
-from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
+from agentfabric.server.signing import DigestFallbackVerifier
 
 
 def utc_now() -> datetime:
@@ -190,27 +190,85 @@ class BillingService:
             currency=currency,
             idempotency_key=idempotency_key,
         )
-        self.db.add(
-            PaymentRecord(
-                tenant_id=tenant_id,
-                provider=payment.provider,
-                provider_txn_id=payment.provider_txn_id,
-                amount=payment.amount,
-                currency=payment.currency,
-                idempotency_key=idempotency_key,
-            )
+        record = PaymentRecord(
+            tenant_id=tenant_id,
+            provider=payment.provider,
+            provider_txn_id=payment.provider_txn_id,
+            amount=payment.amount,
+            currency=payment.currency,
+            idempotency_key=idempotency_key,
+            status=payment.status,
+            updated_at=utc_now(),
         )
-        self.db.add(
-            InvoiceLine(
-                tenant_id=tenant_id,
-                event_type="settlement",
-                quantity=1,
-                unit_price=payment.amount,
-                subtotal=payment.amount,
+        self.db.add(record)
+        if payment.status == "succeeded":
+            self.db.add(
+                InvoiceLine(
+                    tenant_id=tenant_id,
+                    event_type="settlement",
+                    quantity=1,
+                    unit_price=payment.amount,
+                    subtotal=payment.amount,
+                )
             )
-        )
         self.db.flush()
         return {"invoice": invoice, "payment": asdict(payment)}
+
+    def get_payment(self, provider_txn_id: str) -> dict:
+        row = self.db.execute(
+            select(PaymentRecord).where(PaymentRecord.provider_txn_id == provider_txn_id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError("payment not found")
+        return {
+            "provider": row.provider,
+            "provider_txn_id": row.provider_txn_id,
+            "tenant_id": row.tenant_id,
+            "amount": row.amount,
+            "currency": row.currency,
+            "status": row.status,
+            "idempotency_key": row.idempotency_key,
+            "created_at": row.created_at.isoformat(),
+            "updated_at": row.updated_at.isoformat(),
+        }
+
+    def handle_stripe_webhook(self, event: dict) -> dict:
+        event_type = str(event.get("type", ""))
+        data = event.get("data") or {}
+        obj = data.get("object") or {}
+        payment_intent_id = str(obj.get("id", ""))
+        if not payment_intent_id:
+            raise ValidationError("stripe webhook missing payment intent id")
+        row = self.db.execute(
+            select(PaymentRecord).where(
+                PaymentRecord.provider == "stripe",
+                PaymentRecord.provider_txn_id == payment_intent_id,
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError("payment not found for webhook")
+        if event_type == "payment_intent.succeeded":
+            row.status = "succeeded"
+            self.db.add(
+                InvoiceLine(
+                    tenant_id=row.tenant_id,
+                    event_type="settlement",
+                    quantity=1,
+                    unit_price=row.amount,
+                    subtotal=row.amount,
+                )
+            )
+        elif event_type in {"payment_intent.payment_failed", "payment_intent.canceled"}:
+            row.status = "failed"
+        else:
+            row.status = str(obj.get("status", row.status))
+        row.updated_at = utc_now()
+        self.db.add(row)
+        self.db.flush()
+        return {
+            "provider_txn_id": row.provider_txn_id,
+            "status": row.status,
+        }
 
 
 class QueueService:
@@ -229,8 +287,26 @@ class QueueService:
         if item is None:
             return None
         self.store.mark_processing(item.message_id)
-        self.store.mark_done(item.message_id)
         return item
+
+    def ack_success(self, message_id: str) -> None:
+        self.store.mark_done(message_id)
+
+    def ack_failure(self, item: QueueItem, error: str, *, max_attempts: int) -> dict:
+        self.store.mark_failed(item.message_id, error)
+        attempts = int(item.payload.get("__af_retry_count", 0)) + 1
+        if attempts < max_attempts:
+            retry_payload = dict(item.payload)
+            retry_payload["__af_retry_count"] = attempts
+            retry = self.backend.enqueue(item.queue_name, retry_payload)
+            self.store.record_enqueue(item.queue_name, retry_payload, retry.message_id)
+            return {"status": "retried", "retry_message_id": retry.message_id, "attempts": attempts}
+        dlq_name = f"{item.queue_name}.dlq"
+        dlq_payload = dict(item.payload)
+        dlq_payload["__af_retry_count"] = attempts
+        dlq_item = self.backend.enqueue(dlq_name, dlq_payload)
+        self.store.record_enqueue(dlq_name, dlq_payload, dlq_item.message_id)
+        return {"status": "dlq", "dlq_message_id": dlq_item.message_id, "attempts": attempts}
 
 
 class AuditService:

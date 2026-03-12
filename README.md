@@ -46,11 +46,15 @@ Run migrations:
 
 Run API:
 
-`python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --host 0.0.0.0 --port 8000`
+`python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --bootstrap-token "bootstrap-dev" --host 0.0.0.0 --port 8000`
 
 Run worker:
 
-`python -m agentfabric.cli worker-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --queue-name default`
+`python -m agentfabric.cli worker-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --queue-name default --queue-max-attempts 3`
+
+Legacy command compatibility:
+
+`python -m agentfabric.cli prod-api --db-path agentfabric.db --host 127.0.0.1 --port 8080`
 
 ## Deployment artifacts
 

@@ -101,6 +101,7 @@ class QueueMessage(Base):
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
@@ -127,4 +128,6 @@ class PaymentRecord(Base):
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="USD")
     idempotency_key: Mapped[str] = mapped_column(String(256), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 
 import stripe
 
@@ -15,6 +16,7 @@ class PaymentResult:
     provider_txn_id: str
     amount: float
     currency: str
+    status: str
 
 
 class PaymentProcessor:
@@ -47,6 +49,7 @@ class StripePaymentProcessor(PaymentProcessor):
             provider_txn_id=intent["id"],
             amount=amount,
             currency=currency.upper(),
+            status=str(intent.get("status", "pending")),
         )
 
 
@@ -61,4 +64,24 @@ class MockPaymentProcessor(PaymentProcessor):
             provider_txn_id=f"mock:{tenant_id}:{idempotency_key}",
             amount=amount,
             currency=currency.upper(),
+            status="succeeded",
         )
+
+
+def parse_stripe_webhook_event(*, payload: bytes, signature: str | None, webhook_secret: str | None) -> dict:
+    """Parse/verify Stripe webhook payload.
+
+    If webhook secret is configured, the signature is required and validated.
+    In test/local mode without a secret, payload is accepted as plain JSON.
+    """
+    if webhook_secret:
+        if not signature:
+            raise ValidationError("missing Stripe-Signature header")
+        try:
+            return stripe.Webhook.construct_event(payload=payload, sig_header=signature, secret=webhook_secret)
+        except Exception as exc:
+            raise ValidationError(f"invalid stripe webhook: {exc}") from exc
+    try:
+        return json.loads(payload.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"invalid webhook json: {exc}") from exc

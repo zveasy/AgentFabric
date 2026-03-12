@@ -37,10 +37,30 @@ def run_worker(
             if item is None:
                 time.sleep(poll_interval_seconds)
                 continue
-            kind = str(item.payload.get("kind", "default"))
-            handler = handlers.get(kind)
-            if handler:
-                handler(item.payload)
-            else:
-                # Default no-op handler with logging-friendly output.
-                print(json.dumps({"worker": "noop", "queue": queue_name, "message_id": item.message_id, "payload": item.payload}))
+            try:
+                kind = str(item.payload.get("kind", "default"))
+                handler_payload = {k: v for k, v in item.payload.items() if not k.startswith("__af_")}
+                handler = handlers.get(kind)
+                if handler:
+                    handler(handler_payload)
+                else:
+                    # Default no-op handler with logging-friendly output.
+                    print(json.dumps({"worker": "noop", "queue": queue_name, "message_id": item.message_id, "payload": handler_payload}))
+                service.ack_success(item.message_id)
+            except Exception as exc:
+                outcome = service.ack_failure(
+                    item,
+                    str(exc),
+                    max_attempts=max(1, settings.queue_max_attempts),
+                )
+                print(
+                    json.dumps(
+                        {
+                            "worker": "error",
+                            "queue": queue_name,
+                            "message_id": item.message_id,
+                            "error": str(exc),
+                            "outcome": outcome,
+                        }
+                    )
+                )
