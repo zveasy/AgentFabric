@@ -130,8 +130,23 @@ class SqlQueueStore:
         row = self.db.get(QueueMessage, message_id)
         if row:
             row.status = "done"
+            row.last_error = ""
             self.db.add(row)
             self.db.flush()
+
+    def mark_failed(self, message_id: str, error: str) -> None:
+        row = self.db.get(QueueMessage, message_id)
+        if row:
+            row.status = "failed"
+            row.last_error = error
+            self.db.add(row)
+            self.db.flush()
+
+    def get_attempts(self, message_id: str) -> int:
+        row = self.db.get(QueueMessage, message_id)
+        if row is None:
+            return 0
+        return int(row.attempts)
 
     def pending_messages(self, queue_name: str) -> list[QueueMessage]:
         rows = self.db.execute(

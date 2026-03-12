@@ -1,8 +1,6 @@
 """Unit tests for audit log and verification."""
 
 import json
-import tempfile
-from pathlib import Path
 
 from agentfabric.runtime.audit import AuditLog
 from agentfabric.runtime.verification import compute_package_digest, verify_signature

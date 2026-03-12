@@ -4,10 +4,7 @@ Structured logging with correlation IDs. JSON output for production.
 
 from __future__ import annotations
 
-import json
 import logging
-import sys
-from typing import Any
 import structlog
 
 

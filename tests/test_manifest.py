@@ -1,8 +1,6 @@
 """Unit tests for manifest loading and validation."""
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 

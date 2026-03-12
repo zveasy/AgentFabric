@@ -29,3 +29,45 @@ jobs:
         if: ${{ secrets.GHCR_TOKEN != '' }}
         run: |
           docker push ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }}
+
+  deploy-k8s:
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' && secrets.KUBE_CONFIG != '' && secrets.GHCR_TOKEN != '' && secrets.AGENTFABRIC_JWT_SECRET != '' && secrets.AGENTFABRIC_BOOTSTRAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf "%s" "${{ secrets.KUBE_CONFIG }}" > "$HOME/.kube/config"
+      - name: Sync runtime secrets
+        run: |
+          kubectl apply -f deploy/k8s/namespace.yaml
+          kubectl -n agentfabric create secret generic agentfabric-secrets \
+            --from-literal=AGENTFABRIC_JWT_SECRET='${{ secrets.AGENTFABRIC_JWT_SECRET }}' \
+            --from-literal=AGENTFABRIC_BOOTSTRAP_TOKEN='${{ secrets.AGENTFABRIC_BOOTSTRAP_TOKEN }}' \
+            --from-literal=AGENTFABRIC_STRIPE_API_KEY='${{ secrets.AGENTFABRIC_STRIPE_API_KEY }}' \
+            --from-literal=AGENTFABRIC_STRIPE_WEBHOOK_SECRET='${{ secrets.AGENTFABRIC_STRIPE_WEBHOOK_SECRET }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Apply manifests and rollout
+        run: |
+          kubectl apply -f deploy/k8s/configmap.yaml
+          kubectl apply -f deploy/k8s/api-service.yaml
+          kubectl apply -f deploy/k8s/postgres-statefulset.yaml
+          kubectl apply -f deploy/k8s/redis-deployment.yaml
+          kubectl apply -f deploy/k8s/api-deployment.yaml
+          kubectl apply -f deploy/k8s/worker-deployment.yaml
+          kubectl -n agentfabric set image deployment/agentfabric-api api=ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }}
+          kubectl -n agentfabric set image deployment/agentfabric-worker worker=ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }}
+          kubectl -n agentfabric rollout status deployment/agentfabric-api --timeout=180s
+          kubectl -n agentfabric rollout status deployment/agentfabric-worker --timeout=180s
+      - name: Smoke test health endpoint
+        run: |
+          kubectl -n agentfabric run smoke-curl --image=curlimages/curl:8.10.1 --restart=Never --rm -i -- \
+            -fsS "http://agentfabric-api.agentfabric.svc.cluster.local/health"
+      - name: Roll back on failure
+        if: ${{ failure() }}
+        run: |
+          kubectl -n agentfabric rollout undo deployment/agentfabric-api || true
+          kubectl -n agentfabric rollout undo deployment/agentfabric-worker || true

@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import jwt
 from fastapi import HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agentfabric.server.config import Settings

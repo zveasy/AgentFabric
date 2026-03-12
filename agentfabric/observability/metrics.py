@@ -4,7 +4,6 @@ Prometheus-style metrics: run counts, latencies, tool calls, errors.
 
 from __future__ import annotations
 
-from typing import Any
 from prometheus_client import Counter, Histogram, Gauge
 
 

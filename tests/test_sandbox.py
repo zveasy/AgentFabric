@@ -1,7 +1,5 @@
 """Sandbox tests: agent that tries to escape (filesystem, network) is denied."""
 
-import pytest
-
 from agentfabric.runtime.manifest import Manifest
 from agentfabric.runtime.sandbox import Sandbox
 

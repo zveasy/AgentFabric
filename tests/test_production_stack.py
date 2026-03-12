@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import hashlib
-import http.client
-import json
 import tempfile
-import threading
 import unittest
-from http.server import ThreadingHTTPServer
 from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 from agentfabric.errors import ValidationError
 from agentfabric.phase2.models import MeterEvent, PackageUpload, Rating
-from agentfabric.production.api import ProductionApiServer
 from agentfabric.production.control_plane import ProductionControlPlane
+from agentfabric.server.app import create_app
+from agentfabric.server.config import Settings
 
 
 def publish_signature(signer_id: str, payload: bytes) -> str:
@@ -187,51 +186,39 @@ class ProductionStackTests(unittest.TestCase):
 
     def test_http_api_health_and_auth_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = str(Path(tmp) / "prod.db")
-            cp = ProductionControlPlane(db_path=db_path)
-            api = ProductionApiServer(cp)
-            server = ThreadingHTTPServer(("127.0.0.1", 0), api.build_handler())
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            try:
-                host, port = server.server_address
-                conn = http.client.HTTPConnection(host, port, timeout=5)
-                conn.request("GET", "/health")
-                resp = conn.getresponse()
-                body = json.loads(resp.read().decode("utf-8"))
-                self.assertEqual(resp.status, 200)
-                self.assertEqual(body["status"], "ok")
+            sql_db_path = Path(tmp) / "api.db"
+            cp_db_path = Path(tmp) / "prod.db"
+            settings = Settings(
+                database_url=f"sqlite:///{sql_db_path}",
+                production_db_path=str(cp_db_path),
+                redis_url="redis://127.0.0.1:6399/9",
+                jwt_secret="test-secret",
+                bootstrap_token="bootstrap-test-token",
+            )
+            client = TestClient(create_app(settings))
+            health = client.get("/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["status"], "ok")
 
-                payload = {
+            register = client.post(
+                "/auth/principals/register",
+                json={
                     "principal_id": "api-user",
                     "tenant_id": "tenant-a",
                     "principal_type": "user",
                     "scopes": ["registry.read"],
-                }
-                conn.request(
-                    "POST",
-                    "/auth/principals/register",
-                    body=json.dumps(payload),
-                    headers={"Content-Type": "application/json"},
-                )
-                register_resp = conn.getresponse()
-                register_resp.read()
-                self.assertEqual(register_resp.status, 200)
+                },
+                headers={"X-AgentFabric-Bootstrap-Token": "bootstrap-test-token"},
+            )
+            self.assertEqual(register.status_code, 200)
 
-                conn.request(
-                    "POST",
-                    "/auth/token/issue",
-                    body=json.dumps({"principal_id": "api-user"}),
-                    headers={"Content-Type": "application/json"},
-                )
-                token_resp = conn.getresponse()
-                token_payload = json.loads(token_resp.read().decode("utf-8"))
-                self.assertEqual(token_resp.status, 200)
-                self.assertIn("token", token_payload)
-                conn.close()
-            finally:
-                server.shutdown()
-                server.server_close()
+            token_resp = client.post(
+                "/auth/token/issue",
+                json={"principal_id": "api-user"},
+                headers={"X-AgentFabric-Bootstrap-Token": "bootstrap-test-token"},
+            )
+            self.assertEqual(token_resp.status_code, 200)
+            self.assertIn("access_token", token_resp.json())
 
 
 if __name__ == "__main__":

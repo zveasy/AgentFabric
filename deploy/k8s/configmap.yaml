@@ -6,3 +6,6 @@ metadata:
 data:
   AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres.agentfabric.svc.cluster.local:5432/agentfabric
   AGENTFABRIC_REDIS_URL: redis://redis.agentfabric.svc.cluster.local:6379/0
+  AGENTFABRIC_AUTO_MIGRATE: "true"
+  AGENTFABRIC_STRICT_SIGNING: "true"
+  AGENTFABRIC_QUEUE_MAX_ATTEMPTS: "3"
