@@ -1,4 +1,4 @@
-"""Persistent repositories backed by SqliteStore."""
+"""Persistent repositories backed by SqlStore."""
 
 from __future__ import annotations
 
@@ -10,9 +10,12 @@ from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+
 from agentfabric.errors import AuthorizationError, ConflictError, NotFoundError
 from agentfabric.phase2.models import AgentPackage, InstallRecord, MeterEvent, Rating
-from agentfabric.production.db import SqliteStore, utc_now_iso
+from agentfabric.production.db import SqlStore, utc_now_iso
 
 
 def _now() -> datetime:
@@ -22,8 +25,13 @@ def _now() -> datetime:
 class ProductionStore:
     """High-level persistent operations across platform domains."""
 
-    def __init__(self, db_path: str = "agentfabric.db") -> None:
-        self.db = SqliteStore(db_path=db_path)
+    def __init__(self, db_path: str = "agentfabric.db", *, database_url: str | None = None) -> None:
+        self.db = SqlStore(database_url=database_url, db_path=db_path)
+
+    def backup_source_path(self) -> str | None:
+        if self.db.db_path is None:
+            return None
+        return str(self.db.db_path)
 
     # Registry and install operations
     def put_package(self, package: AgentPackage) -> None:
@@ -32,27 +40,32 @@ class ProductionStore:
         try:
             with self.db.connect() as conn:
                 conn.execute(
-                    """
+                    text(
+                        """
                     INSERT INTO registry_packages (
                         namespace, package_id, version, developer_id, category,
                         permissions_json, manifest_json, payload_digest, signature, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        package.namespace,
-                        package.package_id,
-                        package.version,
-                        package.developer_id,
-                        package.category,
-                        json.dumps(list(package.permissions)),
-                        json.dumps(package.manifest, sort_keys=True),
-                        package.payload_digest,
-                        package.signature,
-                        row["created_at"],
+                    ) VALUES (
+                        :namespace, :package_id, :version, :developer_id, :category,
+                        :permissions_json, :manifest_json, :payload_digest, :signature, :created_at
+                    )
+                    """
                     ),
+                    {
+                        "namespace": package.namespace,
+                        "package_id": package.package_id,
+                        "version": package.version,
+                        "developer_id": package.developer_id,
+                        "category": package.category,
+                        "permissions_json": json.dumps(list(package.permissions)),
+                        "manifest_json": json.dumps(package.manifest, sort_keys=True),
+                        "payload_digest": package.payload_digest,
+                        "signature": package.signature,
+                        "created_at": row["created_at"],
+                    },
                 )
-        except Exception as exc:  # pragma: no cover
-            if "UNIQUE constraint failed" in str(exc):
+        except IntegrityError as exc:  # pragma: no cover
+            if "unique" in str(exc).lower():
                 raise ConflictError("package version already exists") from exc
             raise
 
@@ -65,7 +78,8 @@ class ProductionStore:
     ) -> list[AgentPackage]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                """
+                text(
+                    """
                 SELECT rp.* FROM registry_packages rp
                 INNER JOIN (
                     SELECT namespace, package_id, MAX(created_at) AS max_created
@@ -76,6 +90,7 @@ class ProductionStore:
                 AND latest.package_id = rp.package_id
                 AND latest.max_created = rp.created_at
                 """
+                )
             ).fetchall()
         packages = [self._row_to_package(row) for row in rows]
         result: list[AgentPackage] = []
@@ -93,21 +108,25 @@ class ProductionStore:
         with self.db.connect() as conn:
             if version is None:
                 row = conn.execute(
-                    """
+                    text(
+                        """
                     SELECT * FROM registry_packages
-                    WHERE namespace=? AND package_id=?
+                    WHERE namespace=:namespace AND package_id=:package_id
                     ORDER BY created_at DESC
                     LIMIT 1
-                    """,
-                    (namespace, package_id),
+                    """
+                    ),
+                    {"namespace": namespace, "package_id": package_id},
                 ).fetchone()
             else:
                 row = conn.execute(
-                    """
+                    text(
+                        """
                     SELECT * FROM registry_packages
-                    WHERE namespace=? AND package_id=? AND version=?
-                    """,
-                    (namespace, package_id, version),
+                    WHERE namespace=:namespace AND package_id=:package_id AND version=:version
+                    """
+                    ),
+                    {"namespace": namespace, "package_id": package_id, "version": version},
                 ).fetchone()
         if row is None:
             raise NotFoundError("package not found")
@@ -117,23 +136,33 @@ class ProductionStore:
         installed_at = _now()
         with self.db.connect() as conn:
             conn.execute(
+                text(
+                    """
+                INSERT INTO installs (tenant_id, user_id, package_fqid, created_at)
+                VALUES (:tenant_id, :user_id, :package_fqid, :created_at)
                 """
-                INSERT INTO installs (tenant_id, user_id, package_fqid, installed_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (tenant_id, user_id, package_fqid, installed_at.isoformat()),
+                ),
+                {
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "package_fqid": package_fqid,
+                    "created_at": installed_at.isoformat(),
+                },
             )
         return InstallRecord(tenant_id=tenant_id, user_id=user_id, package_fqid=package_fqid, installed_at=installed_at)
 
     def list_installs(self, tenant_id: str) -> list[InstallRecord]:
         with self.db.connect() as conn:
-            rows = conn.execute("SELECT * FROM installs WHERE tenant_id=? ORDER BY id", (tenant_id,)).fetchall()
+            rows = conn.execute(
+                text("SELECT * FROM installs WHERE tenant_id=:tenant_id ORDER BY id"),
+                {"tenant_id": tenant_id},
+            ).fetchall()
         return [
             InstallRecord(
-                tenant_id=row["tenant_id"],
-                user_id=row["user_id"],
-                package_fqid=row["package_fqid"],
-                installed_at=datetime.fromisoformat(row["installed_at"]),
+                tenant_id=row._mapping["tenant_id"],
+                user_id=row._mapping["user_id"],
+                package_fqid=row._mapping["package_fqid"],
+                installed_at=datetime.fromisoformat(row._mapping["created_at"]),
             )
             for row in rows
         ]
@@ -143,21 +172,23 @@ class ProductionStore:
         try:
             with self.db.connect() as conn:
                 conn.execute(
-                    """
+                    text(
+                        """
                     INSERT INTO billing_events (idempotency_key, event_type, tenant_id, actor_id, package_fqid, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event.idempotency_key,
-                        event.event_type,
-                        event.tenant_id,
-                        event.actor_id,
-                        event.package_fqid,
-                        event.created_at.isoformat(),
+                    VALUES (:idempotency_key, :event_type, :tenant_id, :actor_id, :package_fqid, :created_at)
+                    """
                     ),
+                    {
+                        "idempotency_key": event.idempotency_key,
+                        "event_type": event.event_type,
+                        "tenant_id": event.tenant_id,
+                        "actor_id": event.actor_id,
+                        "package_fqid": event.package_fqid,
+                        "created_at": event.created_at.isoformat(),
+                    },
                 )
-        except Exception as exc:  # pragma: no cover
-            if "UNIQUE constraint failed" in str(exc):
+        except IntegrityError as exc:  # pragma: no cover
+            if "unique" in str(exc).lower():
                 return False
             raise
         return True
@@ -165,20 +196,29 @@ class ProductionStore:
     def usage_counts(self, tenant_id: str) -> dict[str, int]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                "SELECT event_type, COUNT(*) AS qty FROM billing_events WHERE tenant_id=? GROUP BY event_type",
-                (tenant_id,),
+                text("SELECT event_type, COUNT(*) AS qty FROM billing_events WHERE tenant_id=:tenant_id GROUP BY event_type"),
+                {"tenant_id": tenant_id},
             ).fetchall()
-        return {row["event_type"]: int(row["qty"]) for row in rows}
+        return {row._mapping["event_type"]: int(row._mapping["qty"]) for row in rows}
 
     def add_billing_ledger_line(self, tenant_id: str, event_type: str, quantity: int, unit_price: float) -> None:
         subtotal = round(quantity * unit_price, 4)
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO billing_ledger (tenant_id, event_type, quantity, unit_price, subtotal, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (tenant_id, event_type, quantity, unit_price, subtotal, utc_now_iso()),
+                VALUES (:tenant_id, :event_type, :quantity, :unit_price, :subtotal, :created_at)
+                """
+                ),
+                {
+                    "tenant_id": tenant_id,
+                    "event_type": event_type,
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                    "subtotal": subtotal,
+                    "created_at": utc_now_iso(),
+                },
             )
 
     # Runtime install state persistence
@@ -197,10 +237,13 @@ class ProductionStore:
         updated_at = utc_now_iso()
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO runtime_agents (
                     agent_id, manifest_json, package_payload_b64, signature, signer_id, signer_key, state, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (
+                    :agent_id, :manifest_json, :package_payload_b64, :signature, :signer_id, :signer_key, :state, :created_at, :updated_at
+                )
                 ON CONFLICT(agent_id) DO UPDATE SET
                     manifest_json=excluded.manifest_json,
                     package_payload_b64=excluded.package_payload_b64,
@@ -209,34 +252,36 @@ class ProductionStore:
                     signer_key=excluded.signer_key,
                     state=excluded.state,
                     updated_at=excluded.updated_at
-                """,
-                (
-                    agent_id,
-                    json.dumps(manifest, sort_keys=True),
-                    base64.b64encode(payload).decode("utf-8"),
-                    signature,
-                    signer_id,
-                    signer_key,
-                    state,
-                    created_at,
-                    updated_at,
+                """
                 ),
+                {
+                    "agent_id": agent_id,
+                    "manifest_json": json.dumps(manifest, sort_keys=True),
+                    "package_payload_b64": base64.b64encode(payload).decode("utf-8"),
+                    "signature": signature,
+                    "signer_id": signer_id,
+                    "signer_key": signer_key,
+                    "state": state,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                },
             )
 
     def list_runtime_agents(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
-            rows = conn.execute("SELECT * FROM runtime_agents ORDER BY agent_id").fetchall()
+            rows = conn.execute(text("SELECT * FROM runtime_agents ORDER BY agent_id")).fetchall()
         out = []
         for row in rows:
+            m = row._mapping
             out.append(
                 {
-                    "agent_id": row["agent_id"],
-                    "manifest": json.loads(row["manifest_json"]),
-                    "payload": base64.b64decode(row["package_payload_b64"].encode("utf-8")),
-                    "signature": row["signature"],
-                    "signer_id": row["signer_id"],
-                    "signer_key": row["signer_key"],
-                    "state": row["state"],
+                    "agent_id": m["agent_id"],
+                    "manifest": json.loads(m["manifest_json"]),
+                    "payload": base64.b64decode(m["package_payload_b64"].encode("utf-8")),
+                    "signature": m["signature"],
+                    "signer_id": m["signer_id"],
+                    "signer_key": m["signer_key"],
+                    "state": m["state"],
                 }
             )
         return out
@@ -244,15 +289,18 @@ class ProductionStore:
     def update_runtime_agent_state(self, agent_id: str, state: str) -> None:
         with self.db.connect() as conn:
             updated = conn.execute(
-                "UPDATE runtime_agents SET state=?, updated_at=? WHERE agent_id=?",
-                (state, utc_now_iso(), agent_id),
+                text("UPDATE runtime_agents SET state=:state, updated_at=:updated_at WHERE agent_id=:agent_id"),
+                {"state": state, "updated_at": utc_now_iso(), "agent_id": agent_id},
             ).rowcount
         if updated == 0:
             raise NotFoundError("runtime agent not found")
 
     def delete_runtime_agent(self, agent_id: str) -> None:
         with self.db.connect() as conn:
-            deleted = conn.execute("DELETE FROM runtime_agents WHERE agent_id=?", (agent_id,)).rowcount
+            deleted = conn.execute(
+                text("DELETE FROM runtime_agents WHERE agent_id=:agent_id"),
+                {"agent_id": agent_id},
+            ).rowcount
         if deleted == 0:
             raise NotFoundError("runtime agent not found")
 
@@ -260,134 +308,196 @@ class ProductionStore:
     def upsert_principal(self, principal_id: str, tenant_id: str, principal_type: str, scopes: list[str]) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO auth_principals (principal_id, tenant_id, principal_type, scopes_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (:principal_id, :tenant_id, :principal_type, :scopes_json, :created_at)
                 ON CONFLICT(principal_id) DO UPDATE SET
                     tenant_id=excluded.tenant_id,
                     principal_type=excluded.principal_type,
                     scopes_json=excluded.scopes_json
-                """,
-                (principal_id, tenant_id, principal_type, json.dumps(scopes), utc_now_iso()),
+                """
+                ),
+                {
+                    "principal_id": principal_id,
+                    "tenant_id": tenant_id,
+                    "principal_type": principal_type,
+                    "scopes_json": json.dumps(scopes),
+                    "created_at": utc_now_iso(),
+                },
             )
 
     def get_principal(self, principal_id: str) -> dict[str, Any]:
         with self.db.connect() as conn:
-            row = conn.execute("SELECT * FROM auth_principals WHERE principal_id=?", (principal_id,)).fetchone()
+            row = conn.execute(
+                text("SELECT * FROM auth_principals WHERE principal_id=:principal_id"),
+                {"principal_id": principal_id},
+            ).fetchone()
         if row is None:
             raise NotFoundError("principal not found")
+        m = row._mapping
         return {
-            "principal_id": row["principal_id"],
-            "tenant_id": row["tenant_id"],
-            "principal_type": row["principal_type"],
-            "scopes": json.loads(row["scopes_json"]),
+            "principal_id": m["principal_id"],
+            "tenant_id": m["tenant_id"],
+            "principal_type": m["principal_type"],
+            "scopes": json.loads(m["scopes_json"]),
         }
 
     def store_token(self, token_id: str, principal_id: str, token_hash: str, expires_at: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO auth_tokens (token_id, principal_id, token_hash, expires_at, revoked, issued_at)
-                VALUES (?, ?, ?, ?, 0, ?)
-                """,
-                (token_id, principal_id, token_hash, expires_at, utc_now_iso()),
+                VALUES (:token_id, :principal_id, :token_hash, :expires_at, false, :issued_at)
+                """
+                ),
+                {
+                    "token_id": token_id,
+                    "principal_id": principal_id,
+                    "token_hash": token_hash,
+                    "expires_at": expires_at,
+                    "issued_at": utc_now_iso(),
+                },
             )
 
     def get_token(self, token_id: str) -> dict[str, Any]:
         with self.db.connect() as conn:
-            row = conn.execute("SELECT * FROM auth_tokens WHERE token_id=?", (token_id,)).fetchone()
+            row = conn.execute(
+                text("SELECT * FROM auth_tokens WHERE token_id=:token_id"),
+                {"token_id": token_id},
+            ).fetchone()
         if row is None:
             raise NotFoundError("token not found")
+        m = row._mapping
         return {
-            "token_id": row["token_id"],
-            "principal_id": row["principal_id"],
-            "token_hash": row["token_hash"],
-            "expires_at": row["expires_at"],
-            "revoked": bool(row["revoked"]),
+            "token_id": m["token_id"],
+            "principal_id": m["principal_id"],
+            "token_hash": m["token_hash"],
+            "expires_at": m["expires_at"],
+            "revoked": bool(m["revoked"]),
         }
 
     def revoke_token(self, token_id: str) -> None:
         with self.db.connect() as conn:
-            conn.execute("UPDATE auth_tokens SET revoked=1 WHERE token_id=?", (token_id,))
+            conn.execute(
+                text("UPDATE auth_tokens SET revoked=true WHERE token_id=:token_id"),
+                {"token_id": token_id},
+            )
 
     def register_service_identity(self, service_id: str, tenant_id: str, secret_hash: str, scopes: list[str]) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO service_identities (service_id, tenant_id, secret_hash, scopes_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (:service_id, :tenant_id, :secret_hash, :scopes_json, :created_at)
                 ON CONFLICT(service_id) DO UPDATE SET
                     tenant_id=excluded.tenant_id,
                     secret_hash=excluded.secret_hash,
                     scopes_json=excluded.scopes_json
-                """,
-                (service_id, tenant_id, secret_hash, json.dumps(scopes), utc_now_iso()),
+                """
+                ),
+                {
+                    "service_id": service_id,
+                    "tenant_id": tenant_id,
+                    "secret_hash": secret_hash,
+                    "scopes_json": json.dumps(scopes),
+                    "created_at": utc_now_iso(),
+                },
             )
 
     def get_service_identity(self, service_id: str) -> dict[str, Any]:
         with self.db.connect() as conn:
-            row = conn.execute("SELECT * FROM service_identities WHERE service_id=?", (service_id,)).fetchone()
+            row = conn.execute(
+                text("SELECT * FROM service_identities WHERE service_id=:service_id"),
+                {"service_id": service_id},
+            ).fetchone()
         if row is None:
             raise NotFoundError("service identity not found")
+        m = row._mapping
         return {
-            "service_id": row["service_id"],
-            "tenant_id": row["tenant_id"],
-            "secret_hash": row["secret_hash"],
-            "scopes": json.loads(row["scopes_json"]),
+            "service_id": m["service_id"],
+            "tenant_id": m["tenant_id"],
+            "secret_hash": m["secret_hash"],
+            "scopes": json.loads(m["scopes_json"]),
         }
 
     # Enterprise controls
     def assign_role(self, principal_id: str, role: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO enterprise_roles (principal_id, role, created_at) VALUES (?, ?, ?)",
-                (principal_id, role, utc_now_iso()),
+                text(
+                    """
+                    INSERT INTO enterprise_roles (principal_id, role, created_at)
+                    VALUES (:principal_id, :role, :created_at)
+                    ON CONFLICT(principal_id, role) DO NOTHING
+                    """
+                ),
+                {"principal_id": principal_id, "role": role, "created_at": utc_now_iso()},
             )
 
     def get_roles(self, principal_id: str) -> set[str]:
         with self.db.connect() as conn:
-            rows = conn.execute("SELECT role FROM enterprise_roles WHERE principal_id=?", (principal_id,)).fetchall()
-        return {row["role"] for row in rows}
+            rows = conn.execute(
+                text("SELECT role FROM enterprise_roles WHERE principal_id=:principal_id"),
+                {"principal_id": principal_id},
+            ).fetchall()
+        return {str(row._mapping["role"]) for row in rows}
 
     def create_namespace(self, tenant_id: str, namespace: str) -> None:
         try:
             with self.db.connect() as conn:
                 conn.execute(
-                    "INSERT INTO private_namespaces (namespace, owner_tenant_id, created_at) VALUES (?, ?, ?)",
-                    (namespace, tenant_id, utc_now_iso()),
+                    text(
+                        """
+                        INSERT INTO private_namespaces (namespace, owner_tenant_id, created_at)
+                        VALUES (:namespace, :owner_tenant_id, :created_at)
+                        """
+                    ),
+                    {"namespace": namespace, "owner_tenant_id": tenant_id, "created_at": utc_now_iso()},
                 )
                 conn.execute(
-                    """
-                    INSERT OR IGNORE INTO private_namespace_memberships (namespace, tenant_id, created_at)
-                    VALUES (?, ?, ?)
-                    """,
-                    (namespace, tenant_id, utc_now_iso()),
+                    text(
+                        """
+                        INSERT INTO private_namespace_memberships (namespace, tenant_id, created_at)
+                        VALUES (:namespace, :tenant_id, :created_at)
+                        ON CONFLICT(namespace, tenant_id) DO NOTHING
+                        """
+                    ),
+                    {"namespace": namespace, "tenant_id": tenant_id, "created_at": utc_now_iso()},
                 )
-        except Exception as exc:  # pragma: no cover
-            if "UNIQUE constraint failed" in str(exc):
+        except IntegrityError as exc:  # pragma: no cover
+            if "unique" in str(exc).lower():
                 raise ConflictError("namespace already exists") from exc
             raise
 
     def grant_namespace_access(self, owner_tenant_id: str, namespace: str, target_tenant_id: str) -> None:
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT owner_tenant_id FROM private_namespaces WHERE namespace=?",
-                (namespace,),
+                text("SELECT owner_tenant_id FROM private_namespaces WHERE namespace=:namespace"),
+                {"namespace": namespace},
             ).fetchone()
             if row is None:
                 raise NotFoundError("namespace not found")
-            if row["owner_tenant_id"] != owner_tenant_id:
+            if str(row._mapping["owner_tenant_id"]) != owner_tenant_id:
                 raise AuthorizationError("only namespace owner can grant access")
             conn.execute(
-                "INSERT OR IGNORE INTO private_namespace_memberships (namespace, tenant_id, created_at) VALUES (?, ?, ?)",
-                (namespace, target_tenant_id, utc_now_iso()),
+                text(
+                    """
+                    INSERT INTO private_namespace_memberships (namespace, tenant_id, created_at)
+                    VALUES (:namespace, :tenant_id, :created_at)
+                    ON CONFLICT(namespace, tenant_id) DO NOTHING
+                    """
+                ),
+                {"namespace": namespace, "tenant_id": target_tenant_id, "created_at": utc_now_iso()},
             )
 
     def has_namespace_access(self, tenant_id: str, namespace: str) -> bool:
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM private_namespace_memberships WHERE namespace=? AND tenant_id=?",
-                (namespace, tenant_id),
+                text("SELECT 1 FROM private_namespace_memberships WHERE namespace=:namespace AND tenant_id=:tenant_id"),
+                {"namespace": namespace, "tenant_id": tenant_id},
             ).fetchone()
         return row is not None
 
@@ -403,31 +513,41 @@ class ProductionStore:
     ) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO immutable_audit_events (
                     timestamp, actor_id, action, target, metadata_json, previous_hash, event_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (utc_now_iso(), actor_id, action, target, json.dumps(metadata, sort_keys=True), previous_hash, event_hash),
+                ) VALUES (:timestamp, :actor_id, :action, :target, :metadata_json, :previous_hash, :event_hash)
+                """
+                ),
+                {
+                    "timestamp": utc_now_iso(),
+                    "actor_id": actor_id,
+                    "action": action,
+                    "target": target,
+                    "metadata_json": json.dumps(metadata, sort_keys=True),
+                    "previous_hash": previous_hash,
+                    "event_hash": event_hash,
+                },
             )
 
     def last_audit_hash(self) -> str:
         with self.db.connect() as conn:
-            row = conn.execute("SELECT event_hash FROM immutable_audit_events ORDER BY id DESC LIMIT 1").fetchone()
-        return row["event_hash"] if row else "GENESIS"
+            row = conn.execute(text("SELECT event_hash FROM immutable_audit_events ORDER BY id DESC LIMIT 1")).fetchone()
+        return str(row._mapping["event_hash"]) if row else "GENESIS"
 
     def audit_events(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
-            rows = conn.execute("SELECT * FROM immutable_audit_events ORDER BY id").fetchall()
+            rows = conn.execute(text("SELECT * FROM immutable_audit_events ORDER BY id")).fetchall()
         return [
             {
-                "timestamp": row["timestamp"],
-                "actor_id": row["actor_id"],
-                "action": row["action"],
-                "target": row["target"],
-                "metadata": json.loads(row["metadata_json"]),
-                "previous_hash": row["previous_hash"],
-                "event_hash": row["event_hash"],
+                "timestamp": row._mapping["timestamp"],
+                "actor_id": row._mapping["actor_id"],
+                "action": row._mapping["action"],
+                "target": row._mapping["target"],
+                "metadata": json.loads(row._mapping["metadata_json"]),
+                "previous_hash": row._mapping["previous_hash"],
+                "event_hash": row._mapping["event_hash"],
             }
             for row in rows
         ]
@@ -436,44 +556,64 @@ class ProductionStore:
     def submit_review(self, rating: Rating, status: str) -> int:
         with self.db.connect() as conn:
             cursor = conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO reviews (tenant_id, package_fqid, user_id, stars, review, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (rating.tenant_id, rating.package_fqid, rating.user_id, rating.stars, rating.review, status, rating.created_at.isoformat()),
+                VALUES (:tenant_id, :package_fqid, :user_id, :stars, :review, :status, :created_at)
+                RETURNING id
+                """
+                ),
+                {
+                    "tenant_id": rating.tenant_id,
+                    "package_fqid": rating.package_fqid,
+                    "user_id": rating.user_id,
+                    "stars": rating.stars,
+                    "review": rating.review,
+                    "status": status,
+                    "created_at": rating.created_at.isoformat(),
+                },
             )
-        return int(cursor.lastrowid)
+            review_id = cursor.scalar_one()
+        return int(review_id)
 
     def enqueue_review_moderation(self, review_id: int, reason: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
-                INSERT OR REPLACE INTO moderation_queue (review_id, status, reason, updated_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (review_id, "pending", reason, utc_now_iso()),
+                text(
+                    """
+                    INSERT INTO moderation_queue (review_id, status, reason, updated_at)
+                    VALUES (:review_id, :status, :reason, :updated_at)
+                    ON CONFLICT(review_id) DO UPDATE SET
+                        status=excluded.status,
+                        reason=excluded.reason,
+                        updated_at=excluded.updated_at
+                    """
+                ),
+                {"review_id": review_id, "status": "pending", "reason": reason, "updated_at": utc_now_iso()},
             )
 
     def pending_reviews(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                """
+                text(
+                    """
                 SELECT r.*, m.reason
                 FROM moderation_queue m
                 INNER JOIN reviews r ON r.id = m.review_id
                 WHERE m.status='pending'
                 ORDER BY r.id
                 """
+                )
             ).fetchall()
         return [
             {
-                "review_id": int(row["id"]),
-                "tenant_id": row["tenant_id"],
-                "package_fqid": row["package_fqid"],
-                "user_id": row["user_id"],
-                "stars": int(row["stars"]),
-                "review": row["review"],
-                "reason": row["reason"],
+                "review_id": int(row._mapping["id"]),
+                "tenant_id": row._mapping["tenant_id"],
+                "package_fqid": row._mapping["package_fqid"],
+                "user_id": row._mapping["user_id"],
+                "stars": int(row._mapping["stars"]),
+                "review": row._mapping["review"],
+                "reason": row._mapping["reason"],
             }
             for row in rows
         ]
@@ -481,35 +621,46 @@ class ProductionStore:
     def moderate_review(self, review_id: int, approved: bool) -> None:
         with self.db.connect() as conn:
             status = "approved" if approved else "rejected"
-            conn.execute("UPDATE reviews SET status=? WHERE id=?", (status, review_id))
             conn.execute(
-                "UPDATE moderation_queue SET status=?, updated_at=? WHERE review_id=?",
-                ("done", utc_now_iso(), review_id),
+                text("UPDATE reviews SET status=:status WHERE id=:review_id"),
+                {"status": status, "review_id": review_id},
+            )
+            conn.execute(
+                text("UPDATE moderation_queue SET status=:status, updated_at=:updated_at WHERE review_id=:review_id"),
+                {"status": "done", "updated_at": utc_now_iso(), "review_id": review_id},
             )
 
     def create_deletion_request(self, tenant_id: str, user_id: str | None, reason: str) -> str:
         request_id = f"gdpr-{uuid4()}"
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO gdpr_deletion_requests (request_id, tenant_id, user_id, status, reason, created_at, completed_at)
-                VALUES (?, ?, ?, 'pending', ?, ?, NULL)
-                """,
-                (request_id, tenant_id, user_id, reason, utc_now_iso()),
+                VALUES (:request_id, :tenant_id, :user_id, 'pending', :reason, :created_at, NULL)
+                """
+                ),
+                {
+                    "request_id": request_id,
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "reason": reason,
+                    "created_at": utc_now_iso(),
+                },
             )
         return request_id
 
     def pending_deletion_requests(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM gdpr_deletion_requests WHERE status='pending' ORDER BY created_at"
+                text("SELECT * FROM gdpr_deletion_requests WHERE status='pending' ORDER BY created_at")
             ).fetchall()
         return [
             {
-                "request_id": row["request_id"],
-                "tenant_id": row["tenant_id"],
-                "user_id": row["user_id"],
-                "reason": row["reason"],
+                "request_id": row._mapping["request_id"],
+                "tenant_id": row._mapping["tenant_id"],
+                "user_id": row._mapping["user_id"],
+                "reason": row._mapping["reason"],
             }
             for row in rows
         ]
@@ -517,60 +668,76 @@ class ProductionStore:
     def execute_deletion_request(self, request_id: str) -> None:
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM gdpr_deletion_requests WHERE request_id=?",
-                (request_id,),
+                text("SELECT * FROM gdpr_deletion_requests WHERE request_id=:request_id"),
+                {"request_id": request_id},
             ).fetchone()
             if row is None:
                 raise NotFoundError("deletion request not found")
-            tenant_id = row["tenant_id"]
-            user_id = row["user_id"]
+            tenant_id = row._mapping["tenant_id"]
+            user_id = row._mapping["user_id"]
             if user_id:
-                conn.execute("DELETE FROM installs WHERE tenant_id=? AND user_id=?", (tenant_id, user_id))
-                conn.execute("DELETE FROM reviews WHERE tenant_id=? AND user_id=?", (tenant_id, user_id))
+                conn.execute(
+                    text("DELETE FROM installs WHERE tenant_id=:tenant_id AND user_id=:user_id"),
+                    {"tenant_id": tenant_id, "user_id": user_id},
+                )
+                conn.execute(
+                    text("DELETE FROM reviews WHERE tenant_id=:tenant_id AND user_id=:user_id"),
+                    {"tenant_id": tenant_id, "user_id": user_id},
+                )
             else:
-                conn.execute("DELETE FROM installs WHERE tenant_id=?", (tenant_id,))
-                conn.execute("DELETE FROM reviews WHERE tenant_id=?", (tenant_id,))
+                conn.execute(text("DELETE FROM installs WHERE tenant_id=:tenant_id"), {"tenant_id": tenant_id})
+                conn.execute(text("DELETE FROM reviews WHERE tenant_id=:tenant_id"), {"tenant_id": tenant_id})
             conn.execute(
-                """
+                text(
+                    """
                 UPDATE gdpr_deletion_requests
-                SET status='completed', completed_at=?
-                WHERE request_id=?
-                """,
-                (utc_now_iso(), request_id),
+                SET status='completed', completed_at=:completed_at
+                WHERE request_id=:request_id
+                """
+                ),
+                {"completed_at": utc_now_iso(), "request_id": request_id},
             )
 
     def set_legal_document(self, doc_type: str, version: str, content: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO legal_documents (doc_type, version, content, updated_at)
-                VALUES (?, ?, ?, ?)
+                VALUES (:doc_type, :version, :content, :updated_at)
                 ON CONFLICT(doc_type) DO UPDATE SET
                     version=excluded.version,
                     content=excluded.content,
                     updated_at=excluded.updated_at
-                """,
-                (doc_type, version, content, utc_now_iso()),
+                """
+                ),
+                {"doc_type": doc_type, "version": version, "content": content, "updated_at": utc_now_iso()},
             )
 
     def get_legal_document(self, doc_type: str) -> dict[str, str]:
         with self.db.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM legal_documents WHERE doc_type=?",
-                (doc_type,),
+                text("SELECT * FROM legal_documents WHERE doc_type=:doc_type"),
+                {"doc_type": doc_type},
             ).fetchone()
         if row is None:
             raise NotFoundError("legal document not found")
-        return {"doc_type": row["doc_type"], "version": row["version"], "content": row["content"]}
+        return {
+            "doc_type": str(row._mapping["doc_type"]),
+            "version": str(row._mapping["version"]),
+            "content": str(row._mapping["content"]),
+        }
 
     def accept_legal_document(self, doc_type: str, version: str, principal_id: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
-                """
+                text(
+                    """
                 INSERT INTO legal_acceptances (doc_type, version, principal_id, accepted_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (doc_type, version, principal_id, utc_now_iso()),
+                VALUES (:doc_type, :version, :principal_id, :accepted_at)
+                """
+                ),
+                {"doc_type": doc_type, "version": version, "principal_id": principal_id, "accepted_at": utc_now_iso()},
             )
 
     # Utility
@@ -579,15 +746,16 @@ class ProductionStore:
         return sha256(secret.encode("utf-8")).hexdigest()
 
     def _row_to_package(self, row: Any) -> AgentPackage:
+        m = row._mapping if hasattr(row, "_mapping") else row
         return AgentPackage(
-            package_id=row["package_id"],
-            version=row["version"],
-            developer_id=row["developer_id"],
-            namespace=row["namespace"],
-            category=row["category"],
-            permissions=tuple(json.loads(row["permissions_json"])),
-            manifest=json.loads(row["manifest_json"]),
-            payload_digest=row["payload_digest"],
-            signature=row["signature"],
-            created_at=datetime.fromisoformat(row["created_at"]),
+            package_id=m["package_id"],
+            version=m["version"],
+            developer_id=m["developer_id"],
+            namespace=m["namespace"],
+            category=m["category"],
+            permissions=tuple(json.loads(m["permissions_json"])),
+            manifest=json.loads(m["manifest_json"]),
+            payload_digest=m["payload_digest"],
+            signature=m["signature"],
+            created_at=datetime.fromisoformat(m["created_at"]),
         )

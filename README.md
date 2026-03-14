@@ -25,6 +25,7 @@ The primary source of truth in this branch is the newer production server stack:
 - **P1**: package security pipeline, stronger sandbox policies, metrics/traces, backup/restore, and retry worker support.
 - **P2**: moderation queue + resolution, billing settlement pathways, GDPR flows, SIEM export, and legal document lifecycle.
 - **Next implementations**: readiness probe (`/health/ready`), queue DLQ replay/inspection APIs (`/queue/replay-dlq`, `/queue/messages`), and audit chain integrity verification (`/enterprise/audit/integrity`).
+- **Persistence unification**: FastAPI + control-plane now persist into the same primary `AGENTFABRIC_DATABASE_URL` datastore.
 
 ## Repository layout
 
@@ -47,7 +48,7 @@ Run migrations:
 
 Run API:
 
-`python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --production-db-path "./agentfabric.db" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --bootstrap-token "bootstrap-dev" --host 0.0.0.0 --port 8000`
+`python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --bootstrap-token "bootstrap-dev" --host 0.0.0.0 --port 8000`
 
 Run worker:
 

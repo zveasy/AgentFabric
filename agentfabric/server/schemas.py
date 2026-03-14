@@ -127,6 +127,92 @@ class AuditIntegrityResponse(BaseModel):
     ok: bool
 
 
+class RuntimeInstallRequest(BaseModel):
+    manifest: dict
+    payload: str
+    signer_id: str
+    signer_key: str
+    signature: str
+
+
+class RuntimeAgentRefRequest(BaseModel):
+    agent_id: str
+
+
+class RuntimeRunRequest(BaseModel):
+    agent_id: str
+    request: dict
+    user_id: str
+    session_id: str
+
+
+class EnterpriseAssignRoleRequest(BaseModel):
+    principal_id: str
+    role: str
+
+
+class EnterprisePermissionCheckRequest(BaseModel):
+    principal_id: str
+    permission: str
+
+
+class NamespaceCreateRequest(BaseModel):
+    owner_tenant_id: str
+    namespace: str
+
+
+class NamespaceGrantRequest(BaseModel):
+    owner_tenant_id: str
+    namespace: str
+    target_tenant_id: str
+
+
+class NamespaceCheckRequest(BaseModel):
+    tenant_id: str
+    namespace: str
+
+
+class EnterpriseAuditAppendRequest(BaseModel):
+    actor_id: str
+    action: str
+    target: str
+    metadata: dict = Field(default_factory=dict)
+
+
+class EnterpriseAuditExportRequest(BaseModel):
+    output_file: str
+
+
+class ReviewSubmitRequest(BaseModel):
+    tenant_id: str
+    package_fqid: str
+    user_id: str
+    stars: int
+    review: str
+
+
+class ReviewResolveRequest(BaseModel):
+    review_id: int
+    approved: bool
+
+
+class GdprDeletionRequest(BaseModel):
+    tenant_id: str
+    user_id: str | None = None
+    reason: str
+
+
+class LegalPublishRequest(BaseModel):
+    doc_type: str
+    version: str
+    content: str
+
+
+class LegalAcceptRequest(BaseModel):
+    doc_type: str
+    principal_id: str
+
+
 class SubmitReviewRequest(BaseModel):
     tenant_id: str
     user_id: str

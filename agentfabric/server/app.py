@@ -23,11 +23,21 @@ from agentfabric.server.queue import InMemoryQueueBackend, RedisQueueBackend
 from agentfabric.server.schemas import (
     AuditIntegrityResponse,
     BillingEventRequest,
+    EnterpriseAssignRoleRequest,
+    EnterpriseAuditAppendRequest,
+    EnterpriseAuditExportRequest,
+    EnterprisePermissionCheckRequest,
+    GdprDeletionRequest,
     HealthResponse,
     InstallPackageRequest,
     InvoiceResponse,
     IssueTokenRequest,
+    LegalAcceptRequest,
+    LegalPublishRequest,
     ListPackagesResponse,
+    NamespaceCheckRequest,
+    NamespaceCreateRequest,
+    NamespaceGrantRequest,
     PackageResponse,
     PublishPackageRequest,
     QueueEnqueueRequest,
@@ -36,6 +46,11 @@ from agentfabric.server.schemas import (
     ReadinessCheckResponse,
     ReadinessResponse,
     RegisterPrincipalRequest,
+    ReviewResolveRequest,
+    ReviewSubmitRequest,
+    RuntimeAgentRefRequest,
+    RuntimeInstallRequest,
+    RuntimeRunRequest,
     ReplayDlqRequest,
     ReplayDlqResponse,
     RotateTokenRequest,
@@ -75,10 +90,15 @@ def choose_signing_verifier(settings: Settings):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    if settings.environment.lower() in {"production", "staging"}:
+        if settings.jwt_secret == "change-me-in-production":
+            raise RuntimeError("AGENTFABRIC_JWT_SECRET must be explicitly configured for production-like environments")
+        if not settings.bootstrap_token:
+            raise RuntimeError("AGENTFABRIC_BOOTSTRAP_TOKEN must be configured for production-like environments")
     if settings.auto_migrate:
         run_migrations(settings.database_url)
     session_factory, _ = build_session_factory(settings)
-    control_plane = ProductionControlPlane(db_path=settings.production_db_path)
+    control_plane = ProductionControlPlane(db_path=settings.production_db_path, database_url=settings.database_url)
     auth = AuthService(settings)
     queue_backend = choose_queue_backend(settings)
     signing_verifier = choose_signing_verifier(settings)
@@ -424,93 +444,93 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"items": control_plane.runtime_agents()}
 
     @app.post("/runtime/install", tags=["runtime"])
-    def runtime_install(payload: dict, request: Request):
+    def runtime_install(payload: RuntimeInstallRequest, request: Request):
         require_scopes(request, ["runtime.install"])
         agent_id = control_plane.install_runtime_agent(
-            manifest=payload["manifest"],
-            payload=payload["payload"].encode("utf-8"),
-            signer_id=payload["signer_id"],
-            signer_key=payload["signer_key"],
-            signature=payload["signature"],
+            manifest=payload.manifest,
+            payload=payload.payload.encode("utf-8"),
+            signer_id=payload.signer_id,
+            signer_key=payload.signer_key,
+            signature=payload.signature,
         )
         return {"agent_id": agent_id}
 
     @app.post("/runtime/load", tags=["runtime"])
-    def runtime_load(payload: dict, request: Request):
+    def runtime_load(payload: RuntimeAgentRefRequest, request: Request):
         require_scopes(request, ["runtime.run"])
-        control_plane.runtime_load(payload["agent_id"])
+        control_plane.runtime_load(payload.agent_id)
         return {"status": "loaded"}
 
     @app.post("/runtime/run", tags=["runtime"])
-    def runtime_run(payload: dict, request: Request):
+    def runtime_run(payload: RuntimeRunRequest, request: Request):
         require_scopes(request, ["runtime.run"])
         return control_plane.runtime_run(
-            agent_id=payload["agent_id"],
-            request=payload["request"],
-            user_id=payload["user_id"],
-            session_id=payload["session_id"],
+            agent_id=payload.agent_id,
+            request=payload.request,
+            user_id=payload.user_id,
+            session_id=payload.session_id,
         )
 
     @app.post("/runtime/suspend", tags=["runtime"])
-    def runtime_suspend(payload: dict, request: Request):
+    def runtime_suspend(payload: RuntimeAgentRefRequest, request: Request):
         require_scopes(request, ["runtime.run"])
-        control_plane.runtime_suspend(payload["agent_id"])
+        control_plane.runtime_suspend(payload.agent_id)
         return {"status": "suspended"}
 
     @app.post("/runtime/uninstall", tags=["runtime"])
-    def runtime_uninstall(payload: dict, request: Request):
+    def runtime_uninstall(payload: RuntimeAgentRefRequest, request: Request):
         require_scopes(request, ["runtime.install"])
-        control_plane.runtime_uninstall(payload["agent_id"])
+        control_plane.runtime_uninstall(payload.agent_id)
         return {"status": "uninstalled"}
 
     @app.post("/enterprise/rbac/assign", tags=["enterprise"])
-    def enterprise_rbac_assign(payload: dict, request: Request):
+    def enterprise_rbac_assign(payload: EnterpriseAssignRoleRequest, request: Request):
         require_scopes(request, ["enterprise.rbac.write"])
-        control_plane.assign_role(payload["principal_id"], payload["role"])
+        control_plane.assign_role(payload.principal_id, payload.role)
         return {"status": "ok"}
 
     @app.post("/enterprise/rbac/check", tags=["enterprise"])
-    def enterprise_rbac_check(payload: dict, request: Request):
+    def enterprise_rbac_check(payload: EnterprisePermissionCheckRequest, request: Request):
         require_scopes(request, ["enterprise.rbac.read"])
-        control_plane.check_permission(payload["principal_id"], payload["permission"])
+        control_plane.check_permission(payload.principal_id, payload.permission)
         return {"allowed": True}
 
     @app.post("/enterprise/namespace/create", tags=["enterprise"])
-    def enterprise_namespace_create(payload: dict, request: Request):
-        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload["owner_tenant_id"])
-        control_plane.create_namespace(payload["owner_tenant_id"], payload["namespace"])
+    def enterprise_namespace_create(payload: NamespaceCreateRequest, request: Request):
+        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload.owner_tenant_id)
+        control_plane.create_namespace(payload.owner_tenant_id, payload.namespace)
         return {"status": "created"}
 
     @app.post("/enterprise/namespace/grant", tags=["enterprise"])
-    def enterprise_namespace_grant(payload: dict, request: Request):
-        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload["owner_tenant_id"])
+    def enterprise_namespace_grant(payload: NamespaceGrantRequest, request: Request):
+        require_scopes(request, ["enterprise.namespace.write"], tenant_id=payload.owner_tenant_id)
         control_plane.grant_namespace_access(
-            payload["owner_tenant_id"],
-            payload["namespace"],
-            payload["target_tenant_id"],
+            payload.owner_tenant_id,
+            payload.namespace,
+            payload.target_tenant_id,
         )
         return {"status": "granted"}
 
     @app.post("/enterprise/namespace/check", tags=["enterprise"])
-    def enterprise_namespace_check(payload: dict, request: Request):
-        require_scopes(request, ["enterprise.namespace.read"], tenant_id=payload["tenant_id"])
-        control_plane.check_namespace_access(payload["tenant_id"], payload["namespace"])
+    def enterprise_namespace_check(payload: NamespaceCheckRequest, request: Request):
+        require_scopes(request, ["enterprise.namespace.read"], tenant_id=payload.tenant_id)
+        control_plane.check_namespace_access(payload.tenant_id, payload.namespace)
         return {"allowed": True}
 
     @app.post("/enterprise/audit/append", tags=["enterprise"])
-    def enterprise_audit_append(payload: dict, request: Request):
+    def enterprise_audit_append(payload: EnterpriseAuditAppendRequest, request: Request):
         require_scopes(request, ["enterprise.audit.write"])
         return control_plane.append_audit(
-            actor_id=payload["actor_id"],
-            action=payload["action"],
-            target=payload["target"],
-            metadata=payload.get("metadata", {}),
+            actor_id=payload.actor_id,
+            action=payload.action,
+            target=payload.target,
+            metadata=payload.metadata,
         )
 
     @app.post("/enterprise/audit/export", tags=["enterprise"])
-    def enterprise_audit_export(payload: dict, request: Request):
+    def enterprise_audit_export(payload: EnterpriseAuditExportRequest, request: Request):
         require_scopes(request, ["enterprise.audit.read"])
-        path = control_plane.export_siem_audit(payload["output_file"])
+        path = control_plane.export_siem_audit(payload.output_file)
         return {"path": path}
 
     @app.get("/enterprise/audit/integrity", response_model=AuditIntegrityResponse, tags=["enterprise"])
@@ -519,15 +539,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return AuditIntegrityResponse(ok=control_plane.verify_audit_integrity())
 
     @app.post("/reviews/submit", tags=["reviews"])
-    def reviews_submit(payload: dict, request: Request):
-        require_scopes(request, ["reviews.write"], tenant_id=payload["tenant_id"])
+    def reviews_submit(payload: ReviewSubmitRequest, request: Request):
+        require_scopes(request, ["reviews.write"], tenant_id=payload.tenant_id)
         review_id = control_plane.submit_review(
             Rating(
-                tenant_id=payload["tenant_id"],
-                package_fqid=payload["package_fqid"],
-                user_id=payload["user_id"],
-                stars=int(payload["stars"]),
-                review=payload["review"],
+                tenant_id=payload.tenant_id,
+                package_fqid=payload.package_fqid,
+                user_id=payload.user_id,
+                stars=int(payload.stars),
+                review=payload.review,
             )
         )
         return {"review_id": review_id}
@@ -538,18 +558,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"items": control_plane.pending_reviews()}
 
     @app.post("/reviews/moderation/resolve", tags=["reviews"])
-    def reviews_resolve(payload: dict, request: Request):
+    def reviews_resolve(payload: ReviewResolveRequest, request: Request):
         require_scopes(request, ["reviews.moderate"])
-        control_plane.moderate_review(int(payload["review_id"]), approved=bool(payload["approved"]))
+        control_plane.moderate_review(payload.review_id, approved=payload.approved)
         return {"status": "ok"}
 
     @app.post("/compliance/gdpr/request", tags=["compliance"])
-    def gdpr_request(payload: dict, request: Request):
-        require_scopes(request, ["compliance.gdpr.write"], tenant_id=payload["tenant_id"])
+    def gdpr_request(payload: GdprDeletionRequest, request: Request):
+        require_scopes(request, ["compliance.gdpr.write"], tenant_id=payload.tenant_id)
         request_id = control_plane.request_gdpr_deletion(
-            tenant_id=payload["tenant_id"],
-            user_id=payload.get("user_id"),
-            reason=payload["reason"],
+            tenant_id=payload.tenant_id,
+            user_id=payload.user_id,
+            reason=payload.reason,
         )
         return {"request_id": request_id}
 
@@ -559,19 +579,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"processed": control_plane.process_gdpr_deletions()}
 
     @app.post("/compliance/legal/publish", tags=["compliance"])
-    def legal_publish(payload: dict, request: Request):
+    def legal_publish(payload: LegalPublishRequest, request: Request):
         require_scopes(request, ["compliance.legal.write"])
         control_plane.publish_legal_document(
-            payload["doc_type"],
-            payload["version"],
-            payload["content"],
+            payload.doc_type,
+            payload.version,
+            payload.content,
         )
         return {"status": "ok"}
 
     @app.post("/compliance/legal/accept", tags=["compliance"])
-    def legal_accept(payload: dict, request: Request):
+    def legal_accept(payload: LegalAcceptRequest, request: Request):
         require_scopes(request, ["compliance.legal.read"])
-        return control_plane.accept_legal_document(payload["doc_type"], payload["principal_id"])
+        return control_plane.accept_legal_document(payload.doc_type, payload.principal_id)
 
     @app.post("/ops/backup", tags=["ops"])
     def ops_backup(request: Request):

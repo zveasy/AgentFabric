@@ -35,9 +35,6 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
-          volumeMounts:
-            - name: agentfabric-data
-              mountPath: /var/lib/agentfabric
           envFrom:
             - configMapRef:
                 name: agentfabric-config
@@ -52,8 +49,6 @@ spec:
             - $(AGENTFABRIC_DATABASE_URL)
             - --redis-url
             - $(AGENTFABRIC_REDIS_URL)
-            - --production-db-path
-            - $(AGENTFABRIC_PRODUCTION_DB_PATH)
             - --jwt-secret
             - $(AGENTFABRIC_JWT_SECRET)
             - --host
@@ -62,7 +57,7 @@ spec:
             - "8000"
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -72,6 +67,3 @@ spec:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
-      volumes:
-        - name: agentfabric-data
-          emptyDir: {}

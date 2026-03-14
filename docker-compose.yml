@@ -24,7 +24,6 @@ services:
       - redis
     environment:
       AGENTFABRIC_DATABASE_URL: postgresql+psycopg://agentfabric:agentfabric@postgres:5432/agentfabric
-      AGENTFABRIC_PRODUCTION_DB_PATH: /app/agentfabric.db
       AGENTFABRIC_REDIS_URL: redis://redis:6379/0
       AGENTFABRIC_JWT_SECRET: change-me
       AGENTFABRIC_BOOTSTRAP_TOKEN: bootstrap-local
@@ -33,7 +32,7 @@ services:
       - "8000:8000"
     command: >
       sh -c "python -m agentfabric.cli db-migrate --database-url $$AGENTFABRIC_DATABASE_URL &&
-             python -m agentfabric.cli api-run --database-url $$AGENTFABRIC_DATABASE_URL --production-db-path $$AGENTFABRIC_PRODUCTION_DB_PATH --redis-url $$AGENTFABRIC_REDIS_URL --jwt-secret $$AGENTFABRIC_JWT_SECRET --host 0.0.0.0 --port 8000"
+             python -m agentfabric.cli api-run --database-url $$AGENTFABRIC_DATABASE_URL --redis-url $$AGENTFABRIC_REDIS_URL --jwt-secret $$AGENTFABRIC_JWT_SECRET --host 0.0.0.0 --port 8000"
 
   worker:
     build: .

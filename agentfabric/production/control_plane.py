@@ -30,8 +30,8 @@ class ProductionControlPlane:
         "subscription_month": 29.0,
     }
 
-    def __init__(self, *, db_path: str = "agentfabric.db") -> None:
-        self.store = ProductionStore(db_path=db_path)
+    def __init__(self, *, db_path: str = "agentfabric.db", database_url: str | None = None) -> None:
+        self.store = ProductionStore(db_path=db_path, database_url=database_url)
         self.runtime = AgentOrchestrator()
         self.auth = TokenAuthService(self.store)
         self.security = PackageSecurityPipeline(signature_policy=SignaturePolicy(require_trusted_signer=False))
@@ -39,7 +39,8 @@ class ProductionControlPlane:
         self.settlement = SettlementService(self.store)
         self.compliance = ComplianceService(self.store)
         self.legal = LegalPolicyService(self.store)
-        self.backups = BackupManager(db_path=db_path)
+        backup_source = self.store.backup_source_path() or db_path
+        self.backups = BackupManager(db_path=backup_source)
         self.prometheus = PrometheusExporter()
         self.trace_exporter = TraceExporter(output_file="artifacts/traces.jsonl")
         self.retry_worker = RetryWorker()
@@ -258,6 +259,8 @@ class ProductionControlPlane:
         return self.prometheus.export(self.runtime.metrics)
 
     def create_backup(self) -> str:
+        if self.store.backup_source_path() is None:
+            raise ValidationError("file backup is only supported for sqlite-backed control plane storage")
         return self.backups.create_backup()
 
     # internal

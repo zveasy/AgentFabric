@@ -62,10 +62,10 @@ jobs:
           kubectl -n agentfabric set image deployment/agentfabric-worker worker=ghcr.io/${{ github.repository_owner }}/agentfabric:${{ github.sha }}
           kubectl -n agentfabric rollout status deployment/agentfabric-api --timeout=180s
           kubectl -n agentfabric rollout status deployment/agentfabric-worker --timeout=180s
-      - name: Smoke test health endpoint
+      - name: Smoke test readiness endpoint
         run: |
           kubectl -n agentfabric run smoke-curl --image=curlimages/curl:8.10.1 --restart=Never --rm -i -- \
-            -fsS "http://agentfabric-api.agentfabric.svc.cluster.local/health"
+            -fsS "http://agentfabric-api.agentfabric.svc.cluster.local/health/ready"
       - name: Roll back on failure
         if: ${{ failure() }}
         run: |

@@ -43,3 +43,45 @@ jobs:
         with:
           name: openapi-${{ matrix.python-version }}
           path: openapi.json
+
+  integration-postgres-redis:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentfabric
+          POSTGRES_USER: agentfabric
+          POSTGRES_PASSWORD: agentfabric
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U agentfabric -d agentfabric"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      AGENTFABRIC_IT_DB_URL: postgresql+psycopg://agentfabric:agentfabric@127.0.0.1:5432/agentfabric
+      AGENTFABRIC_IT_REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+          python -m pip install pytest pytest-asyncio
+      - name: Run Postgres/Redis integration test
+        run: |
+          python -m pytest tests/test_server_postgres_redis_integration.py -q

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -193,6 +194,19 @@ class ServerApiStackTests(unittest.TestCase):
                     )
                 )
 
+    def test_production_requires_non_default_secrets(self) -> None:
+        prod_db_path = Path(self.tmp.name) / "prod-secret-check.db"
+        with self.assertRaises(RuntimeError):
+            create_app(
+                Settings(
+                    database_url=f"sqlite:///{prod_db_path}",
+                    redis_url="redis://127.0.0.1:6399/9",
+                    environment="production",
+                    jwt_secret="change-me-in-production",
+                    bootstrap_token="bootstrap-test-token",
+                )
+            )
+
     def test_stripe_webhook_updates_payment_status(self) -> None:
         session_factory, _ = build_session_factory(self.settings)
         with session_factory() as db:
@@ -327,6 +341,13 @@ class ServerApiStackTests(unittest.TestCase):
         integrity = self.client.get("/enterprise/audit/integrity", headers=headers)
         self.assertEqual(integrity.status_code, 200)
         self.assertTrue(integrity.json()["ok"])
+
+        # Control-plane state is persisted in the primary server database.
+        db_file = self.settings.database_url.removeprefix("sqlite:///")
+        with sqlite3.connect(db_file) as conn:
+            row = conn.execute("SELECT COUNT(*) FROM immutable_audit_events").fetchone()
+        self.assertIsNotNone(row)
+        self.assertGreaterEqual(int(row[0]), 1)
 
         review = self.client.post(
             "/reviews/submit",
