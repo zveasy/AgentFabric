@@ -90,11 +90,6 @@ def _build_parser() -> argparse.ArgumentParser:
     prod_token.add_argument("--principal", required=True)
     prod_token.add_argument("--ttl-seconds", type=int, default=3600)
 
-    prod_api = sub.add_parser("prod-api", help="deprecated alias for api-run (sqlite db-path)")
-    prod_api.add_argument("--db-path", default="agentfabric.db")
-    prod_api.add_argument("--host", default="127.0.0.1")
-    prod_api.add_argument("--port", type=int, default=8080)
-
     db_migrate = sub.add_parser("db-migrate", help="apply alembic migrations to database")
     db_migrate.add_argument("--database-url", required=True)
 
@@ -332,17 +327,6 @@ def main(argv: list[str] | None = None) -> int:
         cp = ProductionControlPlane(db_path=args.db_path)
         token = cp.auth.issue_token(args.principal, ttl_seconds=args.ttl_seconds)
         print(json.dumps({"token": token}))
-        return 0
-
-    if args.command == "prod-api":
-        db_path = Path(args.db_path)
-        database_url = f"sqlite:///{db_path}" if db_path.is_absolute() else f"sqlite:///./{db_path}"
-        os.environ["AGENTFABRIC_DATABASE_URL"] = database_url
-        os.environ["AGENTFABRIC_PRODUCTION_DB_PATH"] = str(db_path)
-        os.environ["AGENTFABRIC_AUTO_MIGRATE"] = "true"
-        settings = Settings()
-        app = create_app(settings)
-        uvicorn.run(app, host=args.host, port=args.port)
         return 0
 
     if args.command == "db-migrate":
