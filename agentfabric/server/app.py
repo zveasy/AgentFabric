@@ -21,6 +21,7 @@ from agentfabric.server.models import Principal
 from agentfabric.server.payments import MockPaymentProcessor, StripePaymentProcessor, parse_stripe_webhook_event
 from agentfabric.server.queue import InMemoryQueueBackend, RedisQueueBackend
 from agentfabric.server.schemas import (
+    AuditIntegrityResponse,
     BillingEventRequest,
     HealthResponse,
     InstallPackageRequest,
@@ -30,8 +31,13 @@ from agentfabric.server.schemas import (
     PackageResponse,
     PublishPackageRequest,
     QueueEnqueueRequest,
+    QueueMessageListResponse,
     QueueMessageResponse,
+    ReadinessCheckResponse,
+    ReadinessResponse,
     RegisterPrincipalRequest,
+    ReplayDlqRequest,
+    ReplayDlqResponse,
     RotateTokenRequest,
     TokenResponse,
 )
@@ -124,6 +130,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def auth_middleware(request: Request, call_next):
         if request.url.path in {
             "/health",
+            "/health/ready",
             "/auth/principals/register",
             "/auth/token/issue",
             "/billing/webhooks/stripe",
@@ -151,6 +158,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health():
         return HealthResponse()
+
+    @app.get("/health/ready", response_model=ReadinessResponse, tags=["system"])
+    def readiness(db: Session = Depends(get_db)):
+        checks: list[ReadinessCheckResponse] = []
+
+        try:
+            db.execute(select(1)).scalar_one()
+            checks.append(ReadinessCheckResponse(name="database", ok=True))
+        except Exception as exc:
+            checks.append(ReadinessCheckResponse(name="database", ok=False, detail=str(exc)))
+
+        queue_ok = queue_backend.healthcheck()
+        queue_detail = f"backend={queue_backend.__class__.__name__}"
+        if not queue_ok:
+            queue_detail = f"{queue_detail}; not reachable"
+        checks.append(ReadinessCheckResponse(name="queue", ok=queue_ok, detail=queue_detail))
+
+        try:
+            audit_ok = control_plane.verify_audit_integrity()
+            checks.append(
+                ReadinessCheckResponse(
+                    name="audit_chain",
+                    ok=audit_ok,
+                    detail="" if audit_ok else "audit chain verification failed",
+                )
+            )
+        except Exception as exc:
+            checks.append(ReadinessCheckResponse(name="audit_chain", ok=False, detail=str(exc)))
+
+        signing_ok = not settings.strict_signing or shutil.which("cosign") is not None
+        signing_detail = "strict signing disabled"
+        if settings.strict_signing:
+            signing_detail = "cosign available" if signing_ok else "strict signing enabled but cosign missing"
+        checks.append(ReadinessCheckResponse(name="signing", ok=signing_ok, detail=signing_detail))
+
+        ready = all(item.ok for item in checks)
+        response = ReadinessResponse(status="ok" if ready else "degraded", checks=checks)
+        if ready:
+            return response
+        return JSONResponse(status_code=503, content=response.model_dump())
 
     def _principal_count(db: Session) -> int:
         return int(db.execute(select(func.count(Principal.principal_id))).scalar_one())
@@ -340,6 +387,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             created_at=item.created_at,
         )
 
+    @app.get("/queue/messages", response_model=QueueMessageListResponse, tags=["queue"])
+    def queue_messages(queue_name: str, request: Request, status: str | None = None, limit: int = 100, db: Session = Depends(get_db)):
+        require_scopes(request, ["queue.read"])
+        service = QueueService(db, backend=queue_backend)
+        messages = service.list_messages(queue_name, status=status, limit=limit)
+        return QueueMessageListResponse(
+            items=[
+                QueueMessageResponse(
+                    message_id=item["message_id"],
+                    queue_name=item["queue_name"],
+                    status=item["status"],
+                    payload=item["payload"],
+                    attempts=item["attempts"],
+                    created_at=item["created_at"],
+                )
+                for item in messages
+            ]
+        )
+
+    @app.post("/queue/replay-dlq", response_model=ReplayDlqResponse, tags=["queue"])
+    def replay_dlq(payload: ReplayDlqRequest, request: Request, db: Session = Depends(get_db)):
+        require_scopes(request, ["queue.write"])
+        service = QueueService(db, backend=queue_backend)
+        result = service.replay_dlq(payload.queue_name, limit=payload.limit)
+        return ReplayDlqResponse(**result)
+
     @app.get("/metrics/prometheus", tags=["system"])
     def metrics(request: Request):
         require_scopes(request, ["metrics.read"])
@@ -439,6 +512,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["enterprise.audit.read"])
         path = control_plane.export_siem_audit(payload["output_file"])
         return {"path": path}
+
+    @app.get("/enterprise/audit/integrity", response_model=AuditIntegrityResponse, tags=["enterprise"])
+    def enterprise_audit_integrity(request: Request):
+        require_scopes(request, ["enterprise.audit.read"])
+        return AuditIntegrityResponse(ok=control_plane.verify_audit_integrity())
 
     @app.post("/reviews/submit", tags=["reviews"])
     def reviews_submit(payload: dict, request: Request):

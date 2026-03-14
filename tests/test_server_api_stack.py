@@ -33,6 +33,13 @@ class ServerApiStackTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_auth_and_registry_billing_queue_flow(self) -> None:
+        readiness = self.client.get("/health/ready")
+        self.assertEqual(readiness.status_code, 200)
+        self.assertEqual(readiness.json()["status"], "ok")
+        readiness_checks = {item["name"] for item in readiness.json()["checks"]}
+        self.assertIn("database", readiness_checks)
+        self.assertIn("queue", readiness_checks)
+
         register = self.client.post(
             "/auth/principals/register",
             json={
@@ -147,6 +154,19 @@ class ServerApiStackTests(unittest.TestCase):
         dequeue = self.client.post("/queue/dequeue", params={"queue_name": "jobs"}, headers=headers)
         self.assertEqual(dequeue.status_code, 200)
         self.assertEqual(dequeue.json()["payload"]["kind"], "demo")
+
+        enqueue_dlq = self.client.post("/queue/enqueue", json={"queue_name": "jobs.dlq", "payload": {"kind": "replay-me"}}, headers=headers)
+        self.assertEqual(enqueue_dlq.status_code, 200)
+        replay = self.client.post("/queue/replay-dlq", json={"queue_name": "jobs", "limit": 5}, headers=headers)
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.json()["replayed"], 1)
+        replayed = self.client.post("/queue/dequeue", params={"queue_name": "jobs"}, headers=headers)
+        self.assertEqual(replayed.status_code, 200)
+        self.assertEqual(replayed.json()["payload"]["kind"], "replay-me")
+
+        dlq_messages = self.client.get("/queue/messages", params={"queue_name": "jobs.dlq", "status": "done"}, headers=headers)
+        self.assertEqual(dlq_messages.status_code, 200)
+        self.assertGreaterEqual(len(dlq_messages.json()["items"]), 1)
 
         rotate = self.client.post("/auth/token/rotate", json={"ttl_seconds": 3600}, headers=headers)
         self.assertEqual(rotate.status_code, 200)
@@ -304,6 +324,9 @@ class ServerApiStackTests(unittest.TestCase):
         )
         self.assertEqual(audit.status_code, 200)
         self.assertIn("event_hash", audit.json())
+        integrity = self.client.get("/enterprise/audit/integrity", headers=headers)
+        self.assertEqual(integrity.status_code, 200)
+        self.assertTrue(integrity.json()["ok"])
 
         review = self.client.post(
             "/reviews/submit",

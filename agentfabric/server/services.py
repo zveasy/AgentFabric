@@ -311,6 +311,47 @@ class QueueService:
         self.store.record_enqueue(dlq_name, dlq_payload, dlq_item.message_id)
         return {"status": "dlq", "dlq_message_id": dlq_item.message_id, "attempts": attempts}
 
+    def list_messages(self, queue_name: str, *, status: str | None = None, limit: int = 100) -> list[dict]:
+        rows = self.store.list_messages(queue_name, status=status, limit=limit)
+        items: list[dict] = []
+        for row in rows:
+            payload = json.loads(row.payload_json)
+            visible_payload = {k: v for k, v in payload.items() if not str(k).startswith("__af_")}
+            items.append(
+                {
+                    "message_id": row.message_id,
+                    "queue_name": row.queue_name,
+                    "status": row.status,
+                    "payload": visible_payload,
+                    "attempts": row.attempts,
+                    "last_error": row.last_error,
+                    "created_at": row.created_at,
+                }
+            )
+        return items
+
+    def replay_dlq(self, queue_name: str, *, limit: int = 100) -> dict:
+        if limit < 1:
+            raise ValidationError("limit must be >= 1")
+        source_queue = f"{queue_name}.dlq"
+        replayed_ids: list[str] = []
+        while len(replayed_ids) < limit:
+            item = self.backend.dequeue(source_queue)
+            if item is None:
+                break
+            self.store.mark_processing(item.message_id)
+            self.store.mark_done(item.message_id)
+            replay_payload = {k: v for k, v in item.payload.items() if k != "__af_retry_count"}
+            replay_item = self.backend.enqueue(queue_name, replay_payload)
+            self.store.record_enqueue(queue_name, replay_payload, replay_item.message_id)
+            replayed_ids.append(replay_item.message_id)
+        return {
+            "queue_name": queue_name,
+            "source_queue": source_queue,
+            "replayed": len(replayed_ids),
+            "message_ids": replayed_ids,
+        }
+
 
 class AuditService:
     def __init__(self, db: Session) -> None:

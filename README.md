@@ -24,6 +24,7 @@ The primary source of truth in this branch is the newer production server stack:
 - **P0**: durable persistence layer, auth/token lifecycle, migration-driven schema management, and service endpoints.
 - **P1**: package security pipeline, stronger sandbox policies, metrics/traces, backup/restore, and retry worker support.
 - **P2**: moderation queue + resolution, billing settlement pathways, GDPR flows, SIEM export, and legal document lifecycle.
+- **Next implementations**: readiness probe (`/health/ready`), queue DLQ replay/inspection APIs (`/queue/replay-dlq`, `/queue/messages`), and audit chain integrity verification (`/enterprise/audit/integrity`).
 
 ## Repository layout
 

@@ -12,6 +12,17 @@ class HealthResponse(BaseModel):
     status: str = "ok"
 
 
+class ReadinessCheckResponse(BaseModel):
+    name: str
+    ok: bool
+    detail: str = ""
+
+
+class ReadinessResponse(BaseModel):
+    status: str
+    checks: list[ReadinessCheckResponse] = Field(default_factory=list)
+
+
 class RegisterPrincipalRequest(BaseModel):
     principal_id: str
     tenant_id: str
@@ -94,6 +105,26 @@ class QueueMessageResponse(BaseModel):
     payload: dict
     attempts: int
     created_at: datetime
+
+
+class QueueMessageListResponse(BaseModel):
+    items: list[QueueMessageResponse]
+
+
+class ReplayDlqRequest(BaseModel):
+    queue_name: str
+    limit: int = 100
+
+
+class ReplayDlqResponse(BaseModel):
+    queue_name: str
+    source_queue: str
+    replayed: int
+    message_ids: list[str] = Field(default_factory=list)
+
+
+class AuditIntegrityResponse(BaseModel):
+    ok: bool
 
 
 class SubmitReviewRequest(BaseModel):

@@ -36,6 +36,9 @@ class QueueBackend:
     def dequeue(self, queue_name: str) -> QueueItem | None:
         raise NotImplementedError
 
+    def healthcheck(self) -> bool:
+        raise NotImplementedError
+
 
 class RedisQueueBackend(QueueBackend):
     """Redis list-backed queue for multi-worker async processing."""
@@ -68,6 +71,12 @@ class RedisQueueBackend(QueueBackend):
             created_at=datetime.fromisoformat(data["created_at"]),
         )
 
+    def healthcheck(self) -> bool:
+        try:
+            return bool(self._client.ping())
+        except Exception:
+            return False
+
 
 class InMemoryQueueBackend(QueueBackend):
     """Fallback queue backend for tests/local development."""
@@ -98,6 +107,9 @@ class InMemoryQueueBackend(QueueBackend):
             attempts=item.attempts + 1,
             created_at=item.created_at,
         )
+
+    def healthcheck(self) -> bool:
+        return True
 
 
 class SqlQueueStore:
@@ -155,4 +167,12 @@ class SqlQueueStore:
                 QueueMessage.status == "queued",
             )
         ).scalars().all()
+        return list(rows)
+
+    def list_messages(self, queue_name: str, *, status: str | None = None, limit: int = 100) -> list[QueueMessage]:
+        stmt = select(QueueMessage).where(QueueMessage.queue_name == queue_name)
+        if status:
+            stmt = stmt.where(QueueMessage.status == status)
+        stmt = stmt.order_by(QueueMessage.created_at.desc()).limit(limit)
+        rows = self.db.execute(stmt).scalars().all()
         return list(rows)
