@@ -62,9 +62,21 @@ class BackupManager:
 
     def restore_backup(self, backup_file: str) -> None:
         source = Path(backup_file)
+        if not source.is_absolute():
+            source = self.backup_dir / source.name
         if not source.exists():
             raise FileNotFoundError(f"backup not found: {backup_file}")
         shutil.copy2(source, self.db_path)
+
+    def list_backups(self) -> list[dict[str, Any]]:
+        """Return backups in backup_dir, newest first (path, mtime_iso)."""
+        if not self.backup_dir.exists():
+            return []
+        out = []
+        for p in sorted(self.backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if p.is_file() and p.suffix == ".db":
+                out.append({"path": str(p), "name": p.name, "mtime": datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc).isoformat()})
+        return out
 
 
 @dataclass

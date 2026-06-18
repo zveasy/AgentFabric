@@ -1,0 +1,8 @@
+{
+  "name": "code_review",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "CodeReviewAgent evaluates a VEIL-referenced diff and routes security findings to governance.",
+  "nodes": ["plan", "code_review", "compliance", "approval"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

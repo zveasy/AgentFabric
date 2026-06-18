@@ -1,0 +1,76 @@
+"""Pilot audit bundle data model."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .manifest import AuditBundleManifest
+from .redactor import contains_raw_sensitive, redact
+
+
+@dataclass(frozen=True)
+class AuditBundle:
+    manifest: AuditBundleManifest
+    tenant_summary: dict[str, object]
+    workflow_timeline: list[dict[str, object]]
+    decision_records: list[dict[str, object]]
+    package_installs: list[dict[str, object]]
+    event_hash_chain: dict[str, object]
+    veil_audit_references: list[str]
+    reputation_summary: dict[str, object]
+    runtime_jobs: list[dict[str, object]]
+    connectors: list[dict[str, object]]
+    connector_results: list[dict[str, object]]
+    tools: list[dict[str, object]]
+    tool_results: list[dict[str, object]]
+    evaluation_results: list[dict[str, object]]
+    feedback: list[dict[str, object]]
+    cost_events: list[dict[str, object]]
+    revenue_events: list[dict[str, object]]
+    health_snapshots: list[dict[str, object]]
+    drift_events: list[dict[str, object]]
+    anomaly_events: list[dict[str, object]]
+    recommendations: list[dict[str, object]]
+    version_comparisons: list[dict[str, object]]
+    connector_manifests: list[dict[str, object]]
+    connector_enablement: list[dict[str, object]]
+    connector_executions: list[dict[str, object]]
+    connector_denials: list[dict[str, object]]
+    credential_lifecycle: list[dict[str, object]]
+    connector_policies: list[dict[str, object]]
+
+    def as_dict(self) -> dict[str, object]:
+        value = {
+            "manifest": self.manifest.as_dict(),
+            "tenant_summary": self.tenant_summary,
+            "workflow_timeline": self.workflow_timeline,
+            "decision_records": self.decision_records,
+            "package_installs": self.package_installs,
+            "event_hash_chain": self.event_hash_chain,
+            "veil_audit_references": self.veil_audit_references,
+            "reputation_summary": self.reputation_summary,
+            "runtime_jobs": self.runtime_jobs,
+            "connectors": self.connectors,
+            "connector_results": self.connector_results,
+            "tools": self.tools,
+            "tool_results": self.tool_results,
+            "evaluation_results": self.evaluation_results,
+            "feedback": self.feedback,
+            "cost_events": self.cost_events,
+            "revenue_events": self.revenue_events,
+            "health_snapshots": self.health_snapshots,
+            "drift_events": self.drift_events,
+            "anomaly_events": self.anomaly_events,
+            "recommendations": self.recommendations,
+            "version_comparisons": self.version_comparisons,
+            "connector_manifests": self.connector_manifests,
+            "connector_enablement": self.connector_enablement,
+            "connector_executions": self.connector_executions,
+            "connector_denials": self.connector_denials,
+            "credential_lifecycle": self.credential_lifecycle,
+            "connector_policies": self.connector_policies,
+        }
+        redacted = redact(value)
+        if contains_raw_sensitive(redacted):
+            raise ValueError("audit bundle contains raw sensitive values")
+        return redacted

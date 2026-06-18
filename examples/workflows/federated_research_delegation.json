@@ -1,0 +1,8 @@
+{
+  "name": "federated_research_delegation",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "ResearchAgent delegates a sanitized research subtask across an active trust agreement.",
+  "nodes": ["policy_check", "federated_discovery", "remote_request", "receipt", "summary"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

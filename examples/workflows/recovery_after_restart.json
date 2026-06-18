@@ -1,0 +1,8 @@
+{
+  "name": "recovery_after_restart",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "Replay durable events and checkpoints to resume a pilot workflow without rerunning completed tasks.",
+  "nodes": ["load_events", "validate_hash_chain", "restore_checkpoint", "resume_pending", "export_audit"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

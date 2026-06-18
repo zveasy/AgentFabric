@@ -11,7 +11,7 @@
 
 The FastAPI server (`agentfabric.server`) provides:
 
-- **System:** `GET /health`, `GET /ready` (DB + Redis readiness)
+- **System:** `GET /health`, `GET /ready` (DB + Redis readiness), `GET /metrics` and `GET /metrics/prometheus` (Prometheus; optional public when `AGENTFABRIC_METRICS_PUBLIC=true`)
 - **Auth:** `POST /auth/principals/register` (with `role`), `POST /auth/token/issue`, `POST /auth/token/rotate`
 - **Registry:** `POST /registry/publish`, `GET /registry/list` (query, category, permission, `private_only`), `POST /registry/install`, `GET/POST /registry/packages/{fqid}/reviews`, `GET /registry/packages/{fqid}/reviews/summary`
 - **Billing:** `POST /billing/events` (idempotent), `GET /billing/invoice`, `POST /billing/settle`
@@ -19,3 +19,4 @@ The FastAPI server (`agentfabric.server`) provides:
 - **Audit:** `POST /audit/append`, `GET /audit/export` (SIEM-style; requires `audit.export`)
 - **Workflows (Phase 3):** `POST /workflows/run` (DAG with idempotency)
 - **Admin (Phase 4):** `POST /admin/principals/{id}/role` (RBAC; requires `rbac.assign_role`)
+- **Ops:** `POST /ops/backup`, `GET /ops/backups`, `POST /ops/restore` (scopes `ops.backup.write`, `ops.backup.read`)

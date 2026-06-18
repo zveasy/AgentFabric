@@ -1,0 +1,22 @@
+[
+  {
+    "package_id": "reference-research-agent",
+    "description": "Signed local-dev fixture for ResearchAgent. Generate current deterministic fixtures with scripts/bootstrap_demo_tenant.py.",
+    "version_metadata": {"version": "1.0.0", "runtime": "agentfabric:generation-11"},
+    "dependencies": [],
+    "signature_fixture": "deterministic-test-key",
+    "risk_summary": {"requires_approval": false, "raw_sensitive_persistence": false},
+    "install_example": {"package_id": "reference-research-agent", "version": "1.0.0", "approved_permissions": true},
+    "rollback_example": {"package_id": "reference-research-agent", "version": "1.0.0", "admin_override": false}
+  },
+  {
+    "package_id": "reference-marketplace-verifier-agent",
+    "description": "Signed local-dev fixture for MarketplaceVerifierAgent.",
+    "version_metadata": {"version": "1.0.0", "runtime": "agentfabric:generation-11"},
+    "dependencies": [],
+    "signature_fixture": "deterministic-test-key",
+    "risk_summary": {"requires_approval": false, "raw_sensitive_persistence": false},
+    "install_example": {"package_id": "reference-marketplace-verifier-agent", "version": "1.0.0", "approved_permissions": true},
+    "rollback_example": {"package_id": "reference-marketplace-verifier-agent", "version": "1.0.0", "admin_override": false}
+  }
+]

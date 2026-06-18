@@ -1,0 +1,11 @@
+{
+  "name": "governance_proposal_quality",
+  "cases": [
+    {
+      "case_id": "governance-quality-1",
+      "input_ref": "veil-proposal-ref",
+      "target_type": "governed_action",
+      "expected_output": {"risk_level": "present", "required_approvals": "present"}
+    }
+  ]
+}

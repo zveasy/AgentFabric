@@ -353,10 +353,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "api-run":
-        os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
-        os.environ["AGENTFABRIC_PRODUCTION_DB_PATH"] = args.production_db_path
-        os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
-        os.environ["AGENTFABRIC_JWT_SECRET"] = args.jwt_secret
+        database_url = os.environ.get("AGENTFABRIC_DATABASE_URL") or args.database_url
+        production_db_path = os.environ.get("AGENTFABRIC_PRODUCTION_DB_PATH") or args.production_db_path
+        redis_url = os.environ.get("AGENTFABRIC_REDIS_URL") or args.redis_url
+        jwt_secret = os.environ.get("AGENTFABRIC_JWT_SECRET") or args.jwt_secret
+        os.environ["AGENTFABRIC_DATABASE_URL"] = database_url
+        os.environ["AGENTFABRIC_PRODUCTION_DB_PATH"] = production_db_path
+        os.environ["AGENTFABRIC_REDIS_URL"] = redis_url
+        os.environ["AGENTFABRIC_JWT_SECRET"] = jwt_secret
         os.environ["AGENTFABRIC_STRICT_SIGNING"] = "true" if args.strict_signing else "false"
         os.environ["AGENTFABRIC_AUTO_MIGRATE"] = "false" if args.disable_auto_migrate else "true"
         os.environ["AGENTFABRIC_QUEUE_MAX_ATTEMPTS"] = str(args.queue_max_attempts)
@@ -374,8 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "worker-run":
         from agentfabric.server.worker import run_worker
 
-        os.environ["AGENTFABRIC_DATABASE_URL"] = args.database_url
-        os.environ["AGENTFABRIC_REDIS_URL"] = args.redis_url
+        database_url = os.environ.get("AGENTFABRIC_DATABASE_URL") or args.database_url
+        redis_url = os.environ.get("AGENTFABRIC_REDIS_URL") or args.redis_url
+        os.environ["AGENTFABRIC_DATABASE_URL"] = database_url
+        os.environ["AGENTFABRIC_REDIS_URL"] = redis_url
         os.environ["AGENTFABRIC_QUEUE_MAX_ATTEMPTS"] = str(args.queue_max_attempts)
         settings = Settings()
         run_worker(

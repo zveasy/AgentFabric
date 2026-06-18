@@ -1,0 +1,11 @@
+{
+  "name": "federated_delegation_response",
+  "cases": [
+    {
+      "case_id": "federated-delegation-1",
+      "input_ref": "veil-federated-ref",
+      "target_type": "federated_delegation",
+      "expected_output": {"remote_status": "completed", "veil_reference": "present"}
+    }
+  ]
+}

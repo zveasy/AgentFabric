@@ -1,0 +1,11 @@
+{
+  "name": "ticket_triage",
+  "cases": [
+    {
+      "case_id": "ticket-triage-1",
+      "input_ref": "veil-ticket-ref",
+      "target_type": "tool_output",
+      "expected_output": {"ticket_priority": "present", "recommended_action": "present"}
+    }
+  ]
+}

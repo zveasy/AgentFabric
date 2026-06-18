@@ -1,36 +1,37 @@
-"""
-Prometheus-style metrics: run counts, latencies, tool calls, errors.
-"""
+"""Runtime metrics snapshots."""
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Histogram, Gauge
+from dataclasses import dataclass, field
+
+from agentfabric.cloud.job import JobStatus
+from agentfabric.cloud.runtime import CloudRuntime
 
 
-# Run metrics
-RUNS_TOTAL = Counter("agentfabric_runs_total", "Total agent runs", ["agent_id", "status"])
-RUN_DURATION = Histogram("agentfabric_run_duration_seconds", "Run duration", ["agent_id"], buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0))
-TOOL_CALLS_TOTAL = Counter("agentfabric_tool_calls_total", "Total tool calls", ["agent_id", "tool_name", "status"])
-SANDBOX_EVENTS_TOTAL = Counter("agentfabric_sandbox_events_total", "Sandbox events", ["agent_id", "kind"])
-ACTIVE_RUNS = Gauge("agentfabric_active_runs", "Currently active runs", ["agent_id"])
+@dataclass
+class MetricsRegistry:
+    workflow_latency_ms: list[float] = field(default_factory=list)
+    agent_run_latency_ms: list[float] = field(default_factory=list)
+    veil_policy_latency_ms: list[float] = field(default_factory=list)
+    marketplace_install_latency_ms: list[float] = field(default_factory=list)
+    governance_approval_latency_ms: list[float] = field(default_factory=list)
 
+    def runtime_snapshot(self, runtime: CloudRuntime) -> dict[str, object]:
+        jobs = runtime.list_jobs()
+        return {
+            "worker_count": len(runtime.workers.list()),
+            "active_jobs": sum(1 for job in jobs if job.status in {JobStatus.ASSIGNED.value, JobStatus.RUNNING.value}),
+            "queued_jobs": sum(1 for job in jobs if job.status == JobStatus.QUEUED.value),
+            "failed_jobs": sum(1 for job in jobs if job.status == JobStatus.FAILED.value),
+            "dead_letter_jobs": len(runtime.queue.dead_letters()),
+            "workflow_latency_ms": self._summary(self.workflow_latency_ms),
+            "agent_run_latency_ms": self._summary(self.agent_run_latency_ms),
+            "veil_policy_latency_ms": self._summary(self.veil_policy_latency_ms),
+            "marketplace_install_latency_ms": self._summary(self.marketplace_install_latency_ms),
+            "governance_approval_latency_ms": self._summary(self.governance_approval_latency_ms),
+        }
 
-def record_run(agent_id: str, success: bool, duration_seconds: float) -> None:
-    RUNS_TOTAL.labels(agent_id=agent_id, status="success" if success else "error").inc()
-    RUN_DURATION.labels(agent_id=agent_id).observe(duration_seconds)
-
-
-def record_tool_call(agent_id: str, tool_name: str, success: bool) -> None:
-    TOOL_CALLS_TOTAL.labels(agent_id=agent_id, tool_name=tool_name, status="success" if success else "error").inc()
-
-
-def record_sandbox_event(agent_id: str, kind: str) -> None:
-    SANDBOX_EVENTS_TOTAL.labels(agent_id=agent_id, kind=kind).inc()
-
-
-def inc_active_runs(agent_id: str) -> None:
-    ACTIVE_RUNS.labels(agent_id=agent_id).inc()
-
-
-def dec_active_runs(agent_id: str) -> None:
-    ACTIVE_RUNS.labels(agent_id=agent_id).dec()
+    def _summary(self, values: list[float]) -> dict[str, float]:
+        if not values:
+            return {"count": 0, "avg": 0.0}
+        return {"count": len(values), "avg": round(sum(values) / len(values), 3)}

@@ -1,0 +1,11 @@
+{
+  "name": "email_analysis",
+  "cases": [
+    {
+      "case_id": "email-analysis-1",
+      "input_ref": "veil-email-ref",
+      "target_type": "connector_intelligence_output",
+      "expected_output": {"email_intent": "present", "summary": "present"}
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "human_approval_pause_resume",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "Workflow pauses on HumanApprovalAgent and resumes after an approval decision is recorded.",
+  "nodes": ["plan", "analysis", "approval_pause", "resume", "decision_record"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

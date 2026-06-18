@@ -1,0 +1,11 @@
+{
+  "name": "code_review",
+  "cases": [
+    {
+      "case_id": "code-review-1",
+      "input_ref": "veil-repo-ref",
+      "target_type": "agent_output",
+      "expected_output": {"review_findings": "present", "classification": "internal"}
+    }
+  ]
+}

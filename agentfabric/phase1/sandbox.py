@@ -11,11 +11,35 @@ from agentfabric.errors import AuthorizationError
 
 @dataclass(frozen=True)
 class SandboxPolicy:
+    """Policy for sandbox filesystem and network access. Use strict() for production."""
+
     allow_network: bool = False
     allowed_filesystem_paths: tuple[str, ...] = ()
     denied_filesystem_prefixes: tuple[str, ...] = ("/etc", "/proc", "/sys", "/dev")
     allowed_network_hosts: tuple[str, ...] = ()
     read_only_filesystem: bool = True
+
+    @classmethod
+    def strict(cls) -> "SandboxPolicy":
+        """Production-strict policy: no network, minimal fs, broader denied prefixes."""
+        return cls(
+            allow_network=False,
+            allowed_filesystem_paths=(),
+            denied_filesystem_prefixes=(
+                "/etc",
+                "/proc",
+                "/sys",
+                "/dev",
+                "/usr",
+                "/bin",
+                "/sbin",
+                "/boot",
+                "/root",
+                "/var",
+            ),
+            allowed_network_hosts=(),
+            read_only_filesystem=True,
+        )
 
 
 class Sandbox:

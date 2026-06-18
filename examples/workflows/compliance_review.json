@@ -1,0 +1,8 @@
+{
+  "name": "compliance_review",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "ComplianceReviewAgent checks workflow evidence and decision records without raw sensitive data.",
+  "nodes": ["collect_evidence", "review_controls", "approval", "export_bundle"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "marketplace_package_approval",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "MarketplaceVerifierAgent validates signed reference package fixtures before governed install.",
+  "nodes": ["verify_signature", "scan_permissions", "proposal", "approval", "install"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

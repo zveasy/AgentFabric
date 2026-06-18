@@ -40,7 +40,6 @@ agentfabric/phase4/marketplace.py
 agentfabric/phase4/rbac.py
 agentfabric/phase4/sla.py
 agentfabric/production/__init__.py
-agentfabric/production/api.py
 agentfabric/production/authn.py
 agentfabric/production/compliance.py
 agentfabric/production/control_plane.py
@@ -88,4 +87,5 @@ tests/test_production_stack.py
 tests/test_sandbox.py
 tests/test_security.py
 tests/test_server_api_stack.py
+tests/test_server_queue_worker.py
 tests/test_tool_router.py

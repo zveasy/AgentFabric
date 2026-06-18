@@ -1,0 +1,11 @@
+{
+  "name": "document_summary",
+  "cases": [
+    {
+      "case_id": "doc-summary-1",
+      "input_ref": "veil-doc-ref",
+      "target_type": "connector_intelligence_output",
+      "expected_output": {"summary": "present", "key_points": "present"}
+    }
+  ]
+}

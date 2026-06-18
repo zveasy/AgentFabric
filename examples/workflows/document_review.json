@@ -1,0 +1,8 @@
+{
+  "name": "document_review",
+  "tenant_id": "demo-tenant",
+  "organization_id": "demo-org",
+  "description": "Planner, research, document analysis, human approval, and compliance review using VEIL references.",
+  "nodes": ["plan", "research", "analyze", "approval", "compliance"],
+  "demonstrates": ["tenant context", "agent mesh", "durable events", "workflow checkpoints", "governance approval", "VEIL boundary usage", "audit export"]
+}

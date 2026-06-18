@@ -1,0 +1,85 @@
+[
+  {
+    "tool_id": "tool-gmail-search",
+    "name": "Gmail Search",
+    "tool_type": "connector_search",
+    "required_connector_type": "gmail",
+    "permission": {
+      "required_rbac_scope": "tools.execute",
+      "required_connector_policy": true,
+      "required_veil_policy_check": true,
+      "governance_approval_required": false,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  },
+  {
+    "tool_id": "tool-m365-document-search",
+    "name": "M365 Document Search",
+    "tool_type": "connector_search",
+    "required_connector_type": "microsoft_365",
+    "permission": {
+      "required_rbac_scope": "tools.execute",
+      "required_connector_policy": true,
+      "required_veil_policy_check": true,
+      "governance_approval_required": false,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  },
+  {
+    "tool_id": "tool-jira-ticket-analysis",
+    "name": "Jira Ticket Analysis",
+    "tool_type": "ticket_analysis",
+    "required_connector_type": "jira",
+    "permission": {
+      "required_rbac_scope": "tools.execute",
+      "required_connector_policy": false,
+      "required_veil_policy_check": true,
+      "governance_approval_required": false,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  },
+  {
+    "tool_id": "tool-servicenow-incident-summary",
+    "name": "ServiceNow Incident Summary",
+    "tool_type": "document_summary",
+    "required_connector_type": "servicenow",
+    "permission": {
+      "required_rbac_scope": "tools.execute",
+      "required_connector_policy": false,
+      "required_veil_policy_check": true,
+      "governance_approval_required": false,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  },
+  {
+    "tool_id": "tool-github-repository-review",
+    "name": "GitHub Repository Review",
+    "tool_type": "code_repository_review",
+    "required_connector_type": "github",
+    "permission": {
+      "required_rbac_scope": "tools.execute",
+      "required_connector_policy": false,
+      "required_veil_policy_check": true,
+      "governance_approval_required": true,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  },
+  {
+    "tool_id": "tool-audit-bundle-export",
+    "name": "Audit Bundle Export",
+    "tool_type": "audit_bundle_generation",
+    "permission": {
+      "required_rbac_scope": "audit.export",
+      "required_connector_policy": false,
+      "required_veil_policy_check": true,
+      "governance_approval_required": true,
+      "result_persistence_allowed": true,
+      "allowed_output_classifications": ["internal"]
+    }
+  }
+]

@@ -1,6 +1,15 @@
 # AgentFabric
 
-Production-ready runtime and marketplace control plane for AI agents.
+AgentFabric is an autonomous agent runtime and registry that talks to VEIL through APIs for trust, sanitization, policy checks, restore requests, tool verification, token issuance, and audit logging.
+
+Generation 16 adds continuous agent operational intelligence: tenant-scoped metrics, health histories, drift and anomaly detection, version comparisons, degradation gates, and controlled improvement recommendations.
+
+Generation 17 adds a permissioned enterprise connector runtime with versioned manifests, tenant enablement, credential references, policy gates, sandbox controls, durable execution audits, and marketplace connector review.
+
+This repository now carries two parallel shapes:
+
+- The existing `agentfabric/` implementation, kept intact for compatibility with the current test surface.
+- A new Phase 0 standalone foundation aligned to the roadmap, built around top-level packages for runtime, registry, scheduler, orchestration, memory, evaluations, versioning, marketplace, connectors, and `veil_client`.
 
 ## Canonical implementation direction
 
@@ -25,20 +34,41 @@ The primary source of truth in this branch is the newer production server stack:
 - **P1**: package security pipeline, stronger sandbox policies, metrics/traces, backup/restore, and retry worker support.
 - **P2**: moderation queue + resolution, billing settlement pathways, GDPR flows, SIEM export, and legal document lifecycle.
 
-## Repository layout
+## Roadmap-aligned foundation
 
-- `agentfabric/phase1`, `agentfabric/phase2`, `agentfabric/phase3`, `agentfabric/phase4`: phase implementations.
+- `runtime/`: agent execution contracts and runtime-facing models.
+- `registry/`: agent metadata and registry contracts.
+- `scheduler/`: task scheduling models and workflow dispatch contracts.
+- `orchestration/`: multi-agent workflow state models.
+- `memory/`: tenant-scoped memory policies and records.
+- `evaluations/`: evaluation scorecards and publish gates.
+- `versioning/`: version, fork, merge, and rollback models.
+- `marketplace/`: listing, install, and visibility contracts.
+- `connectors/`: external tool and system connector interfaces.
+- `veil_client/`: the only allowed boundary for VEIL interactions.
+
+## Existing implementation layout
+
+- `agentfabric/phase1`, `agentfabric/phase2`, `agentfabric/phase3`, `agentfabric/phase4`: legacy phase implementations.
 - `agentfabric/production`: control-plane services and durable operations modules.
 - `agentfabric/server`: FastAPI app, auth, queue, DB/session, worker, and integrations.
+- `agent_observability`: post-release agent metrics, health, drift, anomalies, degradation, version comparison, and recommendations.
+- `agent_connectors`: secure connector manifests, registry, credential vault, execution policy, sandbox, and audit runtime.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
-- `tests`: runtime + production + API stack tests.
+- `tests`: runtime, production, API stack, and foundation tests.
 
 ## Quickstart
 
 Run tests:
 
 `python -m unittest discover -s tests -v`
+
+Run lint + type checks:
+
+`ruff check agentfabric runtime registry scheduler orchestration memory evaluations versioning marketplace connectors veil_client tests`
+
+`mypy agentfabric runtime registry scheduler orchestration memory evaluations versioning marketplace connectors veil_client`
 
 Run migrations:
 
@@ -56,8 +86,37 @@ Legacy command compatibility:
 
 `python -m agentfabric.cli prod-api --db-path agentfabric.db --host 127.0.0.1 --port 8080`
 
+## Production deployment
+
+- **Secrets**: When `AGENTFABRIC_ENVIRONMENT=production`, the app will not start unless `AGENTFABRIC_JWT_SECRET` is set to a non-default value of at least 32 characters.
+- **Readiness**: Use `GET /ready` for Kubernetes readiness probes (checks DB and Redis). Use `GET /health` for liveness.
+- **CORS**: Set `AGENTFABRIC_CORS_ORIGINS` to a comma-separated list of allowed origins (e.g. `https://app.example.com,https://admin.example.com`). If unset, no cross-origin requests are allowed.
+- **Rate limiting**: Auth endpoints (`/auth/principals/register`, `/auth/token/issue`) are limited to 20 requests per minute per client IP by default. Override with `AGENTFABRIC_RATE_LIMIT_AUTH_PER_MINUTE`.
+- **Docker**: The image uses env vars for config. Set `AGENTFABRIC_DATABASE_URL`, `AGENTFABRIC_REDIS_URL`, and `AGENTFABRIC_JWT_SECRET` (and optionally `AGENTFABRIC_ENVIRONMENT=production` and `AGENTFABRIC_BOOTSTRAP_TOKEN`) when running the container.
+- **Env preference**: For `api-run` and `worker-run`, if `AGENTFABRIC_DATABASE_URL`, `AGENTFABRIC_REDIS_URL`, or `AGENTFABRIC_JWT_SECRET` are set in the environment, they override the CLI defaults. This allows Kubernetes `envFrom` to supply config without duplicating values in the pod command.
+- **Metrics**: Set `AGENTFABRIC_METRICS_PUBLIC=true` to expose `GET /metrics` (and `GET /metrics/prometheus`) without authentication for Prometheus scraping. When false, metrics require the `metrics.read` scope.
+- **Backup/restore**: `POST /ops/backup` (create; scope `ops.backup.write`), `GET /ops/backups` (list; scope `ops.backup.read`), `POST /ops/restore` with body `{"backup_file": "path"}` (scope `ops.backup.write`). Admin role includes these scopes.
+- **Logging**: Set `AGENTFABRIC_LOG_LEVEL` (default `INFO`) and `AGENTFABRIC_JSON_LOGS` (default `true`). At startup the app configures structlog; in production use JSON logs for aggregation. Each request is logged (method, path, status_code, duration_ms, client_ip, request_id, principal_id). Pass `X-Request-ID` to correlate or receive it back in the response.
+- **Sandbox**: For stricter agent isolation use `SandboxPolicy.strict()` (no network, minimal filesystem, broader denied prefixes); see `agentfabric.phase1.sandbox`.
+
 ## Deployment artifacts
 
 - GitHub Actions: `.github/workflows/ci.yml`, `.github/workflows/cd.yml`
 - Container: `Dockerfile`, `docker-compose.yml`
 - Kubernetes: `deploy/k8s/*`
+
+## Operational intelligence
+
+Agent observability APIs are available under `/observability/metrics` and `/agents/{agent_id}` for health, drift, anomalies, recommendations, and version comparison. Events use the `agent.metric.recorded`, `agent.health.changed`, `agent.drift.detected`, `agent.anomaly.detected`, `agent.degradation.detected`, `agent.recommendation.created`, and `agent.version.compared` types.
+
+RBAC scopes are `observability:read`, `observability:write`, `health:read`, `drift:read`, `anomaly:read`, `recommendations:read`, and `recommendations:approve`.
+
+See [docs/observability.md](docs/observability.md) for the health model, detection rules, recommendation lifecycle, and fail-closed marketplace behavior.
+
+## Enterprise connectors
+
+Connector execution uses `ConnectorExecutionService`; agents do not receive credentials or call adapters directly. The APIs cover registration, tenant enablement, execution, and credential create/rotate/revoke operations. Durable events record all lifecycle and policy decisions.
+
+Marketplace manifests declare `connector_requirements` and `connector_permissions`. Publication fails closed for undeclared permissions, excessive permissions, unreviewed risky connectors, or low connector trust.
+
+See [docs/connectors.md](docs/connectors.md) for architecture, security, credential handling, APIs, events, and marketplace review.

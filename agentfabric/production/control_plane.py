@@ -260,6 +260,12 @@ class ProductionControlPlane:
     def create_backup(self) -> str:
         return self.backups.create_backup()
 
+    def restore_backup(self, backup_file: str) -> None:
+        self.backups.restore_backup(backup_file)
+
+    def list_backups(self) -> list[dict[str, Any]]:
+        return self.backups.list_backups()
+
     # internal
     def _bootstrap_runtime_from_store(self) -> None:
         for item in self.store.list_runtime_agents():

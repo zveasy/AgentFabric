@@ -1,0 +1,11 @@
+{
+  "name": "marketplace_risk_summary",
+  "cases": [
+    {
+      "case_id": "marketplace-risk-1",
+      "input_ref": "veil-package-ref",
+      "target_type": "marketplace_package",
+      "expected_output": {"risk_summary": "present", "signature_checked": true}
+    }
+  ]
+}
