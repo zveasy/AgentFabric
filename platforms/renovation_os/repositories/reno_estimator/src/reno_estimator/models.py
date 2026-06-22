@@ -1,69 +1,60 @@
-"""Domain models generated from the RenovationOS package definition."""
+"""Typed estimator domain models."""
 
-from __future__ import annotations
+from dataclasses import asdict, dataclass, field
 
-from dataclasses import dataclass, field
-from typing import Any
 
 @dataclass(frozen=True)
 class ProjectIntake:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    project_id: str
+    location: str
+    rooms: tuple["RoomScope", ...]
 
 
 @dataclass(frozen=True)
 class RoomScope:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    name: str
+    area_sqft: float
+    material_category: str
+    labor_hours: float
 
 
 @dataclass(frozen=True)
 class MaterialSelection:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    category: str
+    unit_cost: float
 
 
 @dataclass(frozen=True)
 class LaborAssumption:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    hourly_rate: float
+    location_adjustment: float = 1.0
 
 
 @dataclass(frozen=True)
 class EstimateLineItem:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class EstimateResult:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    room: str
+    material_cost: float
+    labor_cost: float
 
 
 @dataclass(frozen=True)
 class MarginScenario:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    name: str
+    multiplier: float
 
 
 @dataclass(frozen=True)
 class RiskAdjustment:
-    """Typed domain record with deterministic extension fields."""
+    risk_buffer_percentage: float
 
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+
+@dataclass(frozen=True)
+class EstimateResult:
+    project_id: str
+    line_items: tuple[EstimateLineItem, ...]
+    scenarios: dict[str, float]
+    confidence_score: float
+    assumptions: dict[str, float] = field(default_factory=dict)
+
+    def export(self) -> dict[str, object]:
+        return asdict(self)

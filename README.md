@@ -10,6 +10,8 @@ The Software Foundry phase evolves AgentFabric into an API-first repository and 
 
 Generation 18 adds approval-gated repository execution. AgentFabric can now plan, dry-run, approve, materialize, replay, and roll back deterministic repository builds while preserving tenant isolation and durable audit evidence.
 
+Generation 19 adds controlled build workers that convert approved scaffolds into tested first-pass product logic. RenovationOS now includes a deterministic estimator, governed change-order lifecycle, and contractor operations/reliability logic.
+
 This repository now carries two parallel shapes:
 
 - The existing `agentfabric/` implementation, kept intact for compatibility with the current test surface.
@@ -63,6 +65,7 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/domain_platforms`, `agentfabric/blueprints`, `agentfabric/domain_knowledge`: industry platform infrastructure.
 - `agentfabric/repository_lifecycle`, `agentfabric/repository_graph`, `agentfabric/software_teams`: lifecycle, lineage, impact, and team coordination.
 - `agentfabric/repository_execution`, `agentfabric/repository_materializer`: approved execution plans, safe artifact writes, deterministic RenovationOS source trees, replay, and rollback.
+- `agentfabric/build_workers`: capability-scoped domain, service, API, test, documentation, quality, and security workers with build approval, replay, review, and rollback.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -145,3 +148,9 @@ Repository execution APIs are exposed under `/factory/execution`. Planning and d
 The first materialized RenovationOS repositories are `reno_estimator`, `change_order_agent`, and `contractor_command_center`.
 
 See [docs/repository_execution.md](docs/repository_execution.md) for the execution and safety model, and [docs/renovation_os_buildout.md](docs/renovation_os_buildout.md) for the reference repositories.
+
+## Controlled product builds
+
+Build worker APIs are exposed under `/factory/build`. A build requires a completed approved repository execution, then passes through deterministic planning, dry-run validation, a separate approval, execution, security review, and optional rollback.
+
+See [docs/build_workers.md](docs/build_workers.md) for worker governance and [docs/renovation_os_product_logic.md](docs/renovation_os_product_logic.md) for the implemented product behavior.

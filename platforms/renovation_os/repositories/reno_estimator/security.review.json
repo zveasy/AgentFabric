@@ -1,0 +1,7 @@
+{
+  "credential_access": "none",
+  "external_network_access": "none",
+  "path_safety": "passed",
+  "raw_sensitive_persistence": "not_present",
+  "status": "passed"
+}

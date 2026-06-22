@@ -1,69 +1,57 @@
-"""Domain models generated from the RenovationOS package definition."""
+"""Typed change-order domain models."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any
-
-@dataclass(frozen=True)
-class ChangeOrder:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass(frozen=True)
 class ScopeDelta:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    description: str
 
 
 @dataclass(frozen=True)
 class CostDelta:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    amount: float
 
 
 @dataclass(frozen=True)
 class ScheduleDelta:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    days: int
 
 
 @dataclass(frozen=True)
 class ApprovalStatus:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    value: str
 
 
 @dataclass(frozen=True)
 class CustomerApproval:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    approver: str
+    approved: bool
 
 
 @dataclass(frozen=True)
 class ContractorAcknowledgement:
-    """Typed domain record with deterministic extension fields."""
-
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+    contractor: str
 
 
 @dataclass(frozen=True)
 class ChangeOrderAuditRecord:
-    """Typed domain record with deterministic extension fields."""
+    action: str
+    actor: str
+    previous_status: str
+    new_status: str
 
-    record_id: str
-    attributes: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class ChangeOrder:
+    change_order_id: str
+    scope: ScopeDelta
+    cost: CostDelta
+    schedule: ScheduleDelta
+    status: str = "draft"
+    customer_approval: CustomerApproval | None = None
+    contractor_acknowledgement: ContractorAcknowledgement | None = None
+    audit_records: list[ChangeOrderAuditRecord] = field(default_factory=list)
+
+    def export(self) -> dict[str, object]:
+        return asdict(self)

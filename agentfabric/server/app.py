@@ -24,6 +24,7 @@ from agent_connectors import (
 )
 from agent_observability import AgentMetric, OperationalIntelligenceService
 from agentfabric.audit_bundle import AuditBundleExporter
+from agentfabric.build_workers import BuildWorkerService
 from agentfabric.cloud import CloudRuntime, RuntimeConfig, RuntimeJob, Worker
 from agentfabric.cloud.queue_backends import MemoryJobQueue, RedisJobQueue, SQLiteJobQueue
 from agentfabric.cloud.scheduler import ScheduledJob, SchedulerService
@@ -287,6 +288,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         event_store=event_store,
         output_root=Path(settings.factory_output_root),
         platform_root=Path(__file__).resolve().parents[2] / "platforms" / "renovation_os",
+    )
+    build_workers = BuildWorkerService(
+        persistence=durable_store,
+        event_store=event_store,
+        execution_engine=repository_execution,
+        output_root=Path(settings.factory_output_root),
     )
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
@@ -2311,6 +2318,136 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["factory:read"])
         try:
             items = repository_execution.artifacts(ctx, execution_id)
+            return {"items": items, "total": len(items)}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.get("/factory/build/workers", tags=["build-workers"])
+    def factory_build_workers(request: Request):
+        _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        items = build_workers.registry.list()
+        return {"items": items, "total": len(items)}
+
+    @app.post("/factory/build/plan", tags=["build-workers"])
+    def factory_build_plan(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            return build_workers.plan(ctx, str(payload["execution_id"]))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/build/dry-run", tags=["build-workers"])
+    def factory_build_dry_run(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            return build_workers.dry_run(ctx, str(payload["build_id"]))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/build/approve", tags=["build-workers"])
+    def factory_build_approve(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:admin"])
+        try:
+            return build_workers.approve(ctx, str(payload["build_id"]))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/build/run", tags=["build-workers"])
+    def factory_build_run(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            result = build_workers.execute(ctx, str(payload["build_id"]))
+            metering.record(
+                ctx.tenant_id,
+                "factory_repository_builds",
+                metadata={"build_id": result["build_id"]},
+            )
+            return result
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/build/review", tags=["build-workers"])
+    def factory_build_review(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:quality"])
+        try:
+            return build_workers.review(
+                ctx,
+                str(payload["build_id"]),
+                approved=bool(payload.get("approved", True)),
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/build/rollback", tags=["build-workers"])
+    def factory_build_rollback(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:admin"])
+        try:
+            return build_workers.rollback(ctx, str(payload["build_id"]))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/factory/build/{build_id}", tags=["build-workers"])
+    def factory_build_get(build_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            return build_workers.get(ctx, build_id)
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.get("/factory/build/{build_id}/events", tags=["build-workers"])
+    def factory_build_events(build_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            items = build_workers.events(ctx, build_id)
+            return {"items": items, "total": len(items)}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.get("/factory/build/{build_id}/artifacts", tags=["build-workers"])
+    def factory_build_artifacts(build_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            items = build_workers.artifacts(ctx, build_id)
             return {"items": items, "total": len(items)}
         except NotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc))

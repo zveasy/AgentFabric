@@ -166,6 +166,16 @@ EVENT_TYPE_REGISTRY = {
     "factory.execution.completed",
     "factory.execution.rolled_back",
     "factory.execution.replayed",
+    "factory.build.planned",
+    "factory.build.dry_run.completed",
+    "factory.build.approval.recorded",
+    "factory.build.worker.started",
+    "factory.build.worker.completed",
+    "factory.build.failed",
+    "factory.build.completed",
+    "factory.build.review.completed",
+    "factory.build.rolled_back",
+    "factory.build.replayed",
     *(item.value for item in EventType),
 }
 

@@ -76,3 +76,7 @@ The foundry consumes existing AgentFabric capabilities rather than bypassing the
 # Generation 18: Controlled Repository Execution
 
 The software foundry now has a distinct execution boundary. `repository_materializer` produces deterministic in-memory artifacts, while `repository_execution` owns tenant-scoped plans, quality gates, approvals, durable events, contained filesystem writes, replay verification, and rollback. This boundary prevents repository definition from implicitly causing filesystem side effects.
+
+# Generation 19: Controlled Build Workers
+
+`build_workers` consumes only completed approved repository executions. Capability-scoped workers generate a deterministic product delta, tests, documentation, quality evidence, and security evidence. A separate approval binds the output hashes before writes occur. Rollback restores exact pre-build contents, and audit exports retain hashes and decisions without source contents.

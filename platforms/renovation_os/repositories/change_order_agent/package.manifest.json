@@ -3,11 +3,16 @@
   "dependencies": [
     "reno_estimator"
   ],
+  "documentation_status": "updated",
+  "implementation_status": "implemented",
   "industry": "construction",
   "name": "change_order_agent",
   "platform": "RenovationOS",
   "private": true,
+  "product_capability_maturity": "working_first_pass",
   "quality_score": 1.0,
-  "release_readiness": "candidate",
+  "release_readiness": "alpha",
+  "security_review_status": "passed",
+  "test_coverage_status": "first_pass",
   "version": "0.1.0"
 }

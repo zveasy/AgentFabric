@@ -64,6 +64,12 @@ class AuditBundleExporter:
             factory_execution_results=self.persistence.list_tenant("factory_execution_results", tenant_id),
             factory_execution_artifacts=self.persistence.list_tenant("factory_execution_artifacts", tenant_id),
             factory_execution_rollbacks=self.persistence.list_tenant("factory_execution_rollbacks", tenant_id),
+            factory_build_plans=_build_plans(self.persistence, tenant_id),
+            factory_build_approvals=self.persistence.list_tenant("factory_build_approvals", tenant_id),
+            factory_build_results=self.persistence.list_tenant("factory_build_results", tenant_id),
+            factory_build_artifacts=self.persistence.list_tenant("factory_build_artifacts", tenant_id),
+            factory_build_reviews=self.persistence.list_tenant("factory_build_reviews", tenant_id),
+            factory_build_rollbacks=self.persistence.list_tenant("factory_build_rollbacks", tenant_id),
         )
         return bundle
 
@@ -80,6 +86,16 @@ def _execution_plans(
     tenant_id: str,
 ) -> list[dict[str, object]]:
     plans = persistence.list_tenant("factory_execution_plans", tenant_id)
+    for plan in plans:
+        plan.pop("artifact_contents", None)
+    return plans
+
+
+def _build_plans(
+    persistence: PersistenceStore,
+    tenant_id: str,
+) -> list[dict[str, object]]:
+    plans = persistence.list_tenant("factory_build_plans", tenant_id)
     for plan in plans:
         plan.pop("artifact_contents", None)
     return plans

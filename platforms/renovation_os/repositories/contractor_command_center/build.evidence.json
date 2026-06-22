@@ -1,0 +1,11 @@
+{
+  "deterministic": true,
+  "quality_gates": [
+    "domain_models",
+    "service_tests",
+    "api_tests",
+    "documentation",
+    "security"
+  ],
+  "security_review": "passed"
+}

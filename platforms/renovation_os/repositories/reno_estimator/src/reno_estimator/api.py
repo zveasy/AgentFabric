@@ -1,14 +1,21 @@
-"""FastAPI route stubs."""
+"""Estimator API."""
 
 from fastapi import APIRouter, FastAPI
 
-router = APIRouter(tags=["renovation-os"])
+from .models import LaborAssumption, ProjectIntake, RoomScope
+from .service import EstimatorService
+
+router = APIRouter(tags=["estimates"])
+service = EstimatorService()
 
 
-@router.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "repository": "reno_estimator"}
+@router.post("/estimates")
+def create_estimate(payload: dict[str, object]) -> dict[str, object]:
+    rooms = tuple(RoomScope(**item) for item in payload["rooms"])
+    intake = ProjectIntake(str(payload["project_id"]), str(payload["location"]), rooms)
+    labor = LaborAssumption(**payload["labor"])
+    return service.estimate(intake, labor).export()
 
 
-app = FastAPI(title="reno_estimator", version="0.1.0")
+app = FastAPI(title="reno_estimator", version="0.2.0")
 app.include_router(router)

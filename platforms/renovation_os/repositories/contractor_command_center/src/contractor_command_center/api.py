@@ -1,14 +1,19 @@
-"""FastAPI route stubs."""
+"""Contractor command-center API."""
 
 from fastapi import APIRouter, FastAPI
 
-router = APIRouter(tags=["renovation-os"])
+from .models import ContractorProfile
+from .service import ContractorService
+
+router = APIRouter(tags=["contractors"])
+service = ContractorService()
 
 
-@router.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "repository": "contractor_command_center"}
+@router.post("/contractors/reliability")
+def reliability(payload: dict[str, object]) -> dict[str, float]:
+    profile = ContractorProfile(str(payload["contractor_id"]), str(payload["name"]))
+    return {"reliability_score": service.reliability_score(profile)}
 
 
-app = FastAPI(title="contractor_command_center", version="0.1.0")
+app = FastAPI(title="contractor_command_center", version="0.2.0")
 app.include_router(router)
