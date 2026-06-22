@@ -9,6 +9,7 @@ from .evaluation import (
     QualityGateService,
     Scorecard,
 )
+from .repository_quality import REPOSITORY_QUALITY_METRICS, RepositoryQualityGate, RepositoryQualityScore
 
 __all__ = [
     "EvaluationCase",
@@ -18,4 +19,7 @@ __all__ = [
     "QualityGate",
     "QualityGateService",
     "Scorecard",
+    "REPOSITORY_QUALITY_METRICS",
+    "RepositoryQualityGate",
+    "RepositoryQualityScore",
 ]

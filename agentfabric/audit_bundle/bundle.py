@@ -38,6 +38,13 @@ class AuditBundle:
     connector_denials: list[dict[str, object]]
     credential_lifecycle: list[dict[str, object]]
     connector_policies: list[dict[str, object]]
+    factory_ideas: list[dict[str, object]]
+    factory_repositories: list[dict[str, object]]
+    factory_platforms: list[dict[str, object]]
+    factory_artifacts: list[dict[str, object]]
+    factory_packages: list[dict[str, object]]
+    factory_quality: list[dict[str, object]]
+    factory_tasks: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         value = {
@@ -69,6 +76,13 @@ class AuditBundle:
             "connector_denials": self.connector_denials,
             "credential_lifecycle": self.credential_lifecycle,
             "connector_policies": self.connector_policies,
+            "factory_ideas": self.factory_ideas,
+            "factory_repositories": self.factory_repositories,
+            "factory_platforms": self.factory_platforms,
+            "factory_artifacts": self.factory_artifacts,
+            "factory_packages": self.factory_packages,
+            "factory_quality": self.factory_quality,
+            "factory_tasks": self.factory_tasks,
         }
         redacted = redact(value)
         if contains_raw_sensitive(redacted):

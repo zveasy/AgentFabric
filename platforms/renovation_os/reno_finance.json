@@ -1,0 +1,10 @@
+{
+  "name": "reno_finance",
+  "type": "service",
+  "apis": ["/budgets", "/draws", "/invoices"],
+  "events": ["budget.updated", "draw.requested", "invoice.approved"],
+  "rbac_scopes": ["finance:read", "finance:approve"],
+  "metrics": ["budget_variance", "draw_cycle_time"],
+  "tests": ["unit", "ledger_reconciliation", "tenant_isolation"],
+  "deployment_requirements": ["database", "audit_ledger", "VEIL"]
+}

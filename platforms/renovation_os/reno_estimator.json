@@ -1,0 +1,10 @@
+{
+  "name": "reno_estimator",
+  "type": "service",
+  "apis": ["/estimates", "/estimates/{id}"],
+  "events": ["estimate.created", "estimate.updated"],
+  "rbac_scopes": ["estimates:read", "estimates:write"],
+  "metrics": ["estimate_latency", "estimate_accuracy"],
+  "tests": ["unit", "integration", "pricing_regression"],
+  "deployment_requirements": ["container", "database", "VEIL"]
+}

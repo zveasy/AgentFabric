@@ -82,6 +82,8 @@ from agentfabric.production.control_plane import ProductionControlPlane
 from agentfabric.quotas import LimitEnforcer, QuotaPolicy, QuotaTracker
 from agentfabric.reputation import ReputationService
 from agentfabric.recovery import ReplayRecoveryEngine
+from agentfabric.domain_platforms import DomainPlatformDefinition
+from agentfabric.software_factory import SoftwareFoundryService
 from agentfabric.server.auth import AuthService, require_scopes
 from agentfabric.server.config import Settings, get_settings
 from agentfabric.server.database import build_session_factory, run_migrations
@@ -277,6 +279,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     veil = MockVeilClient()
     event_store = EventStore(persistence=durable_store)
     operational_intelligence = OperationalIntelligenceService(durable_store, event_store)
+    software_foundry = SoftwareFoundryService(durable_store, event_store)
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
         event_store=event_store,
@@ -2095,6 +2098,103 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ctx = _tenant_context(request)
         require_scopes(request, ["evaluations.read"])
         return _latest_quality(ctx, "agent_output", agent_id)
+
+    @app.post("/factory/ideas", tags=["software-factory"])
+    def factory_idea_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:write"])
+        try:
+            idea = software_foundry.create_idea(ctx, payload)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        metering.record(ctx.tenant_id, "factory_ideas", metadata={"idea_id": idea.idea_id})
+        return idea.as_dict()
+
+    @app.post("/factory/repositories", tags=["software-factory"])
+    def factory_repository_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            repository, package = software_foundry.generate_repository(ctx, payload)
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        metering.record(
+            ctx.tenant_id,
+            "factory_repositories",
+            metadata={"repository_id": repository.repository_id},
+        )
+        return {"repository": repository.as_dict(), "package": package.as_dict()}
+
+    @app.post("/factory/platforms", tags=["software-factory"])
+    def factory_platform_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:admin"])
+        try:
+            if set(payload) <= {"name"}:
+                platform = software_foundry.platforms.get(str(payload["name"]))
+            else:
+                platform = DomainPlatformDefinition.from_dict(payload)
+            return software_foundry.register_platform(ctx, platform).as_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/factory/platforms", tags=["software-factory"])
+    def factory_platforms(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        items = software_foundry.list_platforms(ctx)
+        return {"items": items, "total": len(items)}
+
+    @app.get("/factory/repositories", tags=["software-factory"])
+    def factory_repositories(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        items = [item.as_dict() for item in software_foundry.lifecycle.list(ctx)]
+        return {"items": items, "total": len(items)}
+
+    @app.get("/factory/repositories/{repository_id}", tags=["software-factory"])
+    def factory_repository_get(repository_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            repository = software_foundry.lifecycle.get(ctx, repository_id)
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        package = durable_store.get("factory_repository_packages", repository_id)
+        return {"repository": repository.as_dict(), "package": package}
+
+    @app.get("/factory/lineage", tags=["software-factory"])
+    def factory_lineage(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        return {"items": software_foundry.graph(ctx).lineage()}
+
+    @app.get("/factory/dependencies", tags=["software-factory"])
+    def factory_dependencies(request: Request, repository_id: str | None = None):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        graph = software_foundry.graph(ctx)
+        if repository_id:
+            try:
+                return graph.impact(repository_id).as_dict()
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc))
+        return {"dependencies": graph.dependencies()}
+
+    @app.get("/factory/quality", tags=["software-factory"])
+    def factory_quality(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:quality"])
+        items = software_foundry.quality(ctx)
+        return {"items": items, "total": len(items)}
 
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):

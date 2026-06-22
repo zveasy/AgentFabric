@@ -1,0 +1,10 @@
+{
+  "name": "change_order_agent",
+  "type": "ai_agent",
+  "apis": ["/change-orders", "/change-orders/{id}/review"],
+  "events": ["change_order.proposed", "change_order.approved"],
+  "rbac_scopes": ["change_orders:read", "change_orders:approve"],
+  "metrics": ["approval_latency", "variance_detected"],
+  "tests": ["unit", "governance", "VEIL_boundary"],
+  "deployment_requirements": ["agent_runtime", "governance", "VEIL"]
+}

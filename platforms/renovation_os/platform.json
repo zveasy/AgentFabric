@@ -1,0 +1,17 @@
+{
+  "name": "RenovationOS",
+  "version": "1.0.0",
+  "packages": [
+    "reno_estimator",
+    "change_order_agent",
+    "contractor_command_center",
+    "materials_intelligence",
+    "field_photo_intelligence",
+    "reno_finance",
+    "homeowner_portal",
+    "reno_trust",
+    "reno_agentfabric"
+  ],
+  "deployment_targets": ["docker", "kubernetes"],
+  "required_evidence": ["test_results", "security_review", "event_integrity", "VEIL_audit_refs"]
+}

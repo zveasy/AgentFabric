@@ -6,6 +6,8 @@ Generation 16 adds continuous agent operational intelligence: tenant-scoped metr
 
 Generation 17 adds a permissioned enterprise connector runtime with versioned manifests, tenant enablement, credential references, policy gates, sandbox controls, durable execution audits, and marketplace connector review.
 
+The Software Foundry phase evolves AgentFabric into an API-first repository and industry-platform factory with deterministic blueprints, signed generation artifacts, fail-closed repository quality gates, lifecycle tracking, lineage analysis, and RenovationOS seed packages.
+
 This repository now carries two parallel shapes:
 
 - The existing `agentfabric/` implementation, kept intact for compatibility with the current test surface.
@@ -54,6 +56,10 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/server`: FastAPI app, auth, queue, DB/session, worker, and integrations.
 - `agent_observability`: post-release agent metrics, health, drift, anomalies, degradation, version comparison, and recommendations.
 - `agent_connectors`: secure connector manifests, registry, credential vault, execution policy, sandbox, and audit runtime.
+- `agentfabric/repository_factory`: deterministic project templates, manifests, blueprints, dependency graphs, and scaffolding.
+- `agentfabric/software_factory`: signed requirements-to-release repository generation pipeline.
+- `agentfabric/domain_platforms`, `agentfabric/blueprints`, `agentfabric/domain_knowledge`: industry platform infrastructure.
+- `agentfabric/repository_lifecycle`, `agentfabric/repository_graph`, `agentfabric/software_teams`: lifecycle, lineage, impact, and team coordination.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -120,3 +126,11 @@ Connector execution uses `ConnectorExecutionService`; agents do not receive cred
 Marketplace manifests declare `connector_requirements` and `connector_permissions`. Publication fails closed for undeclared permissions, excessive permissions, unreviewed risky connectors, or low connector trust.
 
 See [docs/connectors.md](docs/connectors.md) for architecture, security, credential handling, APIs, events, and marketplace review.
+
+## AI Software Foundry
+
+The foundry accepts tenant-scoped ideas, applies industry blueprints and knowledge packs, enforces repository quality evidence, emits signed stage artifacts, and packages validated repositories. Built-in platforms include RenovationOS, TreasuryOS, TrustOS, EnergyOS, ManufacturingOS, DefenseOS, and SpaceOS.
+
+Factory APIs are exposed under `/factory`. RenovationOS package definitions are available under `platforms/renovation_os/`.
+
+See [docs/software_foundry.md](docs/software_foundry.md) for architecture, deterministic exports, quality gates, platform catalogs, events, and API details.

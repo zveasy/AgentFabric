@@ -1,0 +1,10 @@
+{
+  "name": "field_photo_intelligence",
+  "type": "ai_agent",
+  "apis": ["/field-photos", "/field-photos/{id}/analyze"],
+  "events": ["field_photo.received", "field_photo.analyzed"],
+  "rbac_scopes": ["photos:read", "photos:analyze"],
+  "metrics": ["analysis_latency", "defect_detection_rate"],
+  "tests": ["unit", "evaluation", "privacy"],
+  "deployment_requirements": ["object_storage", "agent_runtime", "VEIL"]
+}

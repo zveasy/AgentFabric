@@ -4083,6 +4083,450 @@
         ]
       }
     },
+    "/factory/dependencies": {
+      "get": {
+        "operationId": "factory_dependencies_factory_dependencies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Dependencies",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/ideas": {
+      "post": {
+        "operationId": "factory_idea_create_factory_ideas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Idea Create",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/lineage": {
+      "get": {
+        "operationId": "factory_lineage_factory_lineage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Lineage",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/platforms": {
+      "get": {
+        "operationId": "factory_platforms_factory_platforms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Platforms",
+        "tags": [
+          "software-factory"
+        ]
+      },
+      "post": {
+        "operationId": "factory_platform_create_factory_platforms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Platform Create",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/quality": {
+      "get": {
+        "operationId": "factory_quality_factory_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Quality",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/repositories": {
+      "get": {
+        "operationId": "factory_repositories_factory_repositories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Repositories",
+        "tags": [
+          "software-factory"
+        ]
+      },
+      "post": {
+        "operationId": "factory_repository_create_factory_repositories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Repository Create",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
+    "/factory/repositories/{repository_id}": {
+      "get": {
+        "operationId": "factory_repository_get_factory_repositories__repository_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Repository Get",
+        "tags": [
+          "software-factory"
+        ]
+      }
+    },
     "/federation/agreements": {
       "get": {
         "operationId": "federation_agreements_list_federation_agreements_get",

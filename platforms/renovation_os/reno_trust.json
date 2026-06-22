@@ -1,0 +1,10 @@
+{
+  "name": "reno_trust",
+  "type": "service",
+  "apis": ["/evidence", "/compliance/reviews"],
+  "events": ["evidence.recorded", "compliance.reviewed"],
+  "rbac_scopes": ["trust:read", "trust:review"],
+  "metrics": ["evidence_completeness", "review_latency"],
+  "tests": ["unit", "hash_chain", "VEIL_boundary"],
+  "deployment_requirements": ["event_store", "VEIL", "Aegis_Gate"]
+}

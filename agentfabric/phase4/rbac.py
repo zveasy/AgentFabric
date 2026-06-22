@@ -398,6 +398,25 @@ class RbacService:
         },
     }
 
+    ROLE_PERMISSIONS["admin"].update({
+        "factory:read",
+        "factory:write",
+        "factory:execute",
+        "factory:admin",
+        "factory:quality",
+    })
+    ROLE_PERMISSIONS["developer"].update({
+        "factory:read",
+        "factory:write",
+        "factory:execute",
+        "factory:quality",
+    })
+    ROLE_PERMISSIONS["operator"].update({"factory:read", "factory:execute", "factory:quality"})
+    ROLE_PERMISSIONS["viewer"].add("factory:read")
+    ROLE_PERMISSIONS["reviewer"].update({"factory:read", "factory:quality"})
+    ROLE_PERMISSIONS["auditor"].update({"factory:read", "factory:quality"})
+    ROLE_PERMISSIONS["service_account"].update({"factory:read", "factory:execute"})
+
     ROLE_PERMISSIONS["owner"] = set().union(*ROLE_PERMISSIONS.values()) | {
         "auth.admin",
         "members.manage",

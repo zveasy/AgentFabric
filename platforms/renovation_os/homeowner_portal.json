@@ -1,0 +1,10 @@
+{
+  "name": "homeowner_portal",
+  "type": "frontend",
+  "apis": ["/homeowner/projects", "/homeowner/approvals"],
+  "events": ["homeowner.approval_requested", "homeowner.approval_resolved"],
+  "rbac_scopes": ["homeowner:read", "homeowner:approve"],
+  "metrics": ["approval_latency", "portal_availability"],
+  "tests": ["unit", "browser", "accessibility", "tenant_isolation"],
+  "deployment_requirements": ["web_runtime", "identity_provider"]
+}

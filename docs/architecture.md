@@ -45,3 +45,31 @@ All messages follow the [Agent Protocol Layer](agent-protocol-layer.md): JSON wi
 
 - **Local**: CLI `agentfabric run` and Python API; agents live under `~/.agentfabric/agents/` (or `AGENTFABRIC_AGENTS_DIR`).
 - **Hosted** (Phase 2): Registry, API, and billing sit in front of the same runtime; orchestration can be distributed with a shared registry and queue.
+# AgentFabric Architecture
+
+AgentFabric is an enterprise agent operating system and AI Software Foundry.
+
+## Foundry Layer
+
+The software foundry sits above the runtime, governance, marketplace, connector, persistence, and evaluation layers:
+
+```text
+Idea
+  -> Domain Blueprint + Knowledge Pack
+  -> Repository Manifest
+  -> Signed Generation Artifacts
+  -> Repository Quality Gate
+  -> Repository Package
+  -> Lifecycle + Lineage + Marketplace
+```
+
+Repository manifests are canonical and content-addressed. Operational records remain tenant-scoped and event-sourced. Generation cannot proceed without complete quality evidence, and all generated artifacts, releases, updates, and lifecycle operations are included in audit exports.
+
+The foundry consumes existing AgentFabric capabilities rather than bypassing them:
+
+* persistence and event integrity from the durable state layer
+* tenant context and RBAC from enterprise controls
+* quality enforcement from evaluation
+* package categories and release controls from marketplace
+* audit export from the audit bundle
+* VEIL and Aegis authority boundaries remain unchanged

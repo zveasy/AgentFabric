@@ -16,7 +16,7 @@ class AuditBundleManifest:
     tenant_id: str
     bundle_id: str = field(default_factory=lambda: f"audit-bundle-{uuid4().hex[:12]}")
     created_at: datetime = field(default_factory=utc_now)
-    schema_version: str = "generation-17"
+    schema_version: str = "software-foundry-generation-17"
 
     def as_dict(self) -> dict[str, object]:
         return {

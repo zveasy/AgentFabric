@@ -15,6 +15,10 @@ class PackageMetadata:
     revoked: bool = False
     high_risk_approved: bool = False
     approval_notes: str = ""
+    category: str = "general"
+    bundle_id: str | None = None
+    compatibility: dict[str, str] = field(default_factory=dict)
+    quality_score: float | None = None
     extra: dict[str, object] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, object]:
@@ -27,6 +31,10 @@ class PackageMetadata:
             "revoked": self.revoked,
             "high_risk_approved": self.high_risk_approved,
             "approval_notes": self.approval_notes,
+            "category": self.category,
+            "bundle_id": self.bundle_id,
+            "compatibility": dict(self.compatibility),
+            "quality_score": self.quality_score,
             "extra": dict(self.extra),
         }
 
@@ -41,5 +49,9 @@ class PackageMetadata:
             revoked=bool(value.get("revoked", False)),
             high_risk_approved=bool(value.get("high_risk_approved", False)),
             approval_notes=str(value.get("approval_notes", "")),
+            category=str(value.get("category", "general")),
+            bundle_id=str(value["bundle_id"]) if value.get("bundle_id") else None,
+            compatibility={str(key): str(item) for key, item in dict(value.get("compatibility", {})).items()},
+            quality_score=float(value["quality_score"]) if value.get("quality_score") is not None else None,
             extra=dict(value.get("extra", {})),
         )

@@ -1,0 +1,10 @@
+{
+  "name": "contractor_command_center",
+  "type": "frontend",
+  "apis": ["/projects", "/projects/{id}/status"],
+  "events": ["project.status_changed", "project.alert_created"],
+  "rbac_scopes": ["projects:read", "projects:manage"],
+  "metrics": ["active_projects", "schedule_variance"],
+  "tests": ["unit", "browser", "accessibility"],
+  "deployment_requirements": ["web_runtime", "api_gateway"]
+}

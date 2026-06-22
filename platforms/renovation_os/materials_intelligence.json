@@ -1,0 +1,10 @@
+{
+  "name": "materials_intelligence",
+  "type": "service",
+  "apis": ["/materials/search", "/materials/pricing"],
+  "events": ["material.price_updated", "material.shortage_detected"],
+  "rbac_scopes": ["materials:read", "materials:manage"],
+  "metrics": ["price_freshness", "supplier_coverage"],
+  "tests": ["unit", "connector", "data_quality"],
+  "deployment_requirements": ["container", "connector_runtime", "VEIL"]
+}

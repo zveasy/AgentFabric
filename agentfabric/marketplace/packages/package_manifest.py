@@ -8,6 +8,16 @@ import json
 
 from .package_dependency import PackageDependency
 
+INDUSTRY_PACKAGE_CATEGORIES = {
+    "general",
+    "construction",
+    "treasury",
+    "trust",
+    "energy",
+    "manufacturing",
+    "aerospace",
+}
+
 
 @dataclass(frozen=True)
 class PackageManifest:

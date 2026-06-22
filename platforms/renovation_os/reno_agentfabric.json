@@ -1,0 +1,10 @@
+{
+  "name": "reno_agentfabric",
+  "type": "domain_platform",
+  "apis": ["/reno/agents", "/reno/workflows", "/reno/governance"],
+  "events": ["reno.workflow.started", "reno.workflow.completed"],
+  "rbac_scopes": ["reno:read", "reno:execute", "reno:admin"],
+  "metrics": ["workflow_success", "agent_quality", "cost_per_project"],
+  "tests": ["unit", "integration", "recovery", "governance"],
+  "deployment_requirements": ["AgentFabric", "VEIL", "Aegis_Gate", "kubernetes"]
+}

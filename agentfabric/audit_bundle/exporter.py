@@ -52,6 +52,13 @@ class AuditBundleExporter:
             connector_denials=self.persistence.list_tenant("enterprise_connector_denials", tenant_id),
             credential_lifecycle=self.persistence.list_tenant("connector_credentials", tenant_id),
             connector_policies=self.persistence.list_tenant("enterprise_connector_policies", tenant_id),
+            factory_ideas=self.persistence.list_tenant("factory_ideas", tenant_id),
+            factory_repositories=self.persistence.list_tenant("factory_repositories", tenant_id),
+            factory_platforms=self.persistence.list_tenant("factory_platforms", tenant_id),
+            factory_artifacts=self.persistence.list_tenant("factory_artifacts", tenant_id),
+            factory_packages=self.persistence.list_tenant("factory_repository_packages", tenant_id),
+            factory_quality=self.persistence.list_tenant("factory_quality_scores", tenant_id),
+            factory_tasks=self.persistence.list_tenant("factory_software_tasks", tenant_id),
         )
         return bundle
 
