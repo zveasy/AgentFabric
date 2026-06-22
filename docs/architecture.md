@@ -73,3 +73,6 @@ The foundry consumes existing AgentFabric capabilities rather than bypassing the
 * package categories and release controls from marketplace
 * audit export from the audit bundle
 * VEIL and Aegis authority boundaries remain unchanged
+# Generation 18: Controlled Repository Execution
+
+The software foundry now has a distinct execution boundary. `repository_materializer` produces deterministic in-memory artifacts, while `repository_execution` owns tenant-scoped plans, quality gates, approvals, durable events, contained filesystem writes, replay verification, and rollback. This boundary prevents repository definition from implicitly causing filesystem side effects.

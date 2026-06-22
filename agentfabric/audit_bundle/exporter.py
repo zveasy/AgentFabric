@@ -59,6 +59,11 @@ class AuditBundleExporter:
             factory_packages=self.persistence.list_tenant("factory_repository_packages", tenant_id),
             factory_quality=self.persistence.list_tenant("factory_quality_scores", tenant_id),
             factory_tasks=self.persistence.list_tenant("factory_software_tasks", tenant_id),
+            factory_execution_plans=_execution_plans(self.persistence, tenant_id),
+            factory_execution_approvals=self.persistence.list_tenant("factory_execution_approvals", tenant_id),
+            factory_execution_results=self.persistence.list_tenant("factory_execution_results", tenant_id),
+            factory_execution_artifacts=self.persistence.list_tenant("factory_execution_artifacts", tenant_id),
+            factory_execution_rollbacks=self.persistence.list_tenant("factory_execution_rollbacks", tenant_id),
         )
         return bundle
 
@@ -68,3 +73,13 @@ def _veil_refs(records: list[dict[str, object]]) -> list[str]:
     for record in records:
         refs.extend(str(item) for item in record.get("veil_audit_refs", ()))
     return refs
+
+
+def _execution_plans(
+    persistence: PersistenceStore,
+    tenant_id: str,
+) -> list[dict[str, object]]:
+    plans = persistence.list_tenant("factory_execution_plans", tenant_id)
+    for plan in plans:
+        plan.pop("artifact_contents", None)
+    return plans

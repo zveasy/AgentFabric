@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     metrics_public: bool = False
     log_level: str = "INFO"
     json_logs: bool = True  # set False for dev console; production uses True
+    factory_output_root: str = "/tmp/agentfabric-generated"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

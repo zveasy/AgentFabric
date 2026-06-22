@@ -157,6 +157,15 @@ EVENT_TYPE_REGISTRY = {
     "factory.quality.passed",
     "factory.quality.failed",
     "factory.team.task.assigned",
+    "factory.execution.planned",
+    "factory.execution.dry_run.completed",
+    "factory.execution.approval.recorded",
+    "factory.execution.step.started",
+    "factory.execution.step.completed",
+    "factory.execution.step.failed",
+    "factory.execution.completed",
+    "factory.execution.rolled_back",
+    "factory.execution.replayed",
     *(item.value for item in EventType),
 }
 

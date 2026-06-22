@@ -1,0 +1,42 @@
+{
+  "apis": [
+    "/estimates",
+    "/estimates/{id}"
+  ],
+  "architecture": "layered FastAPI service with domain, service, API, audit, and metrics boundaries",
+  "dependencies": [],
+  "documentation_requirements": [
+    "README",
+    "api",
+    "architecture",
+    "deployment"
+  ],
+  "domain": "construction",
+  "events": [
+    "estimate.created",
+    "estimate.updated"
+  ],
+  "metadata": {
+    "capability": "reno_estimator",
+    "industry": "construction",
+    "platform": "RenovationOS",
+    "quality_score": 1.0,
+    "release_readiness": "candidate"
+  },
+  "name": "reno_estimator",
+  "observability": [
+    "estimate_accuracy",
+    "estimate_latency"
+  ],
+  "purpose": "Produce auditable renovation estimates, margins, and risk adjustments.",
+  "rbac_scopes": [
+    "estimates:read",
+    "estimates:write"
+  ],
+  "repository_type": "service",
+  "tests": [
+    "integration",
+    "pricing_regression",
+    "unit"
+  ]
+}

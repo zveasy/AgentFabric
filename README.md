@@ -8,6 +8,8 @@ Generation 17 adds a permissioned enterprise connector runtime with versioned ma
 
 The Software Foundry phase evolves AgentFabric into an API-first repository and industry-platform factory with deterministic blueprints, signed generation artifacts, fail-closed repository quality gates, lifecycle tracking, lineage analysis, and RenovationOS seed packages.
 
+Generation 18 adds approval-gated repository execution. AgentFabric can now plan, dry-run, approve, materialize, replay, and roll back deterministic repository builds while preserving tenant isolation and durable audit evidence.
+
 This repository now carries two parallel shapes:
 
 - The existing `agentfabric/` implementation, kept intact for compatibility with the current test surface.
@@ -60,6 +62,7 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/software_factory`: signed requirements-to-release repository generation pipeline.
 - `agentfabric/domain_platforms`, `agentfabric/blueprints`, `agentfabric/domain_knowledge`: industry platform infrastructure.
 - `agentfabric/repository_lifecycle`, `agentfabric/repository_graph`, `agentfabric/software_teams`: lifecycle, lineage, impact, and team coordination.
+- `agentfabric/repository_execution`, `agentfabric/repository_materializer`: approved execution plans, safe artifact writes, deterministic RenovationOS source trees, replay, and rollback.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -134,3 +137,11 @@ The foundry accepts tenant-scoped ideas, applies industry blueprints and knowled
 Factory APIs are exposed under `/factory`. RenovationOS package definitions are available under `platforms/renovation_os/`.
 
 See [docs/software_foundry.md](docs/software_foundry.md) for architecture, deterministic exports, quality gates, platform catalogs, events, and API details.
+
+## Repository execution
+
+Repository execution APIs are exposed under `/factory/execution`. Planning and dry runs are in-memory; file writes require a tenant-scoped approval whose digest matches the plan. Generated runtime repositories are isolated under the configured tenant output directory.
+
+The first materialized RenovationOS repositories are `reno_estimator`, `change_order_agent`, and `contractor_command_center`.
+
+See [docs/repository_execution.md](docs/repository_execution.md) for the execution and safety model, and [docs/renovation_os_buildout.md](docs/renovation_os_buildout.md) for the reference repositories.

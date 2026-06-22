@@ -1,0 +1,5 @@
+services:
+  contractor_command_center:
+    build: .
+    ports:
+      - "8000:8000"

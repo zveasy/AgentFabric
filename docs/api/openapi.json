@@ -4148,6 +4148,475 @@
         ]
       }
     },
+    "/factory/execution/approve": {
+      "post": {
+        "operationId": "factory_execution_approve_factory_execution_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Approve",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/dry-run": {
+      "post": {
+        "operationId": "factory_execution_dry_run_factory_execution_dry_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Dry Run",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/plan": {
+      "post": {
+        "operationId": "factory_execution_plan_factory_execution_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Plan",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/rollback": {
+      "post": {
+        "operationId": "factory_execution_rollback_factory_execution_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Rollback",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/run": {
+      "post": {
+        "operationId": "factory_execution_run_factory_execution_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Run",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/{execution_id}": {
+      "get": {
+        "operationId": "factory_execution_get_factory_execution__execution_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Get",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/{execution_id}/artifacts": {
+      "get": {
+        "operationId": "factory_execution_artifacts_factory_execution__execution_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Artifacts",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
+    "/factory/execution/{execution_id}/events": {
+      "get": {
+        "operationId": "factory_execution_events_factory_execution__execution_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Factory Execution Events",
+        "tags": [
+          "repository-execution"
+        ]
+      }
+    },
     "/factory/ideas": {
       "post": {
         "operationId": "factory_idea_create_factory_ideas_post",

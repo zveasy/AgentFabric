@@ -1,0 +1,14 @@
+{
+  "capability": "contractor_command_center",
+  "dependencies": [
+    "change_order_agent",
+    "materials_intelligence"
+  ],
+  "industry": "construction",
+  "name": "contractor_command_center",
+  "platform": "RenovationOS",
+  "private": true,
+  "quality_score": 1.0,
+  "release_readiness": "candidate",
+  "version": "0.1.0"
+}

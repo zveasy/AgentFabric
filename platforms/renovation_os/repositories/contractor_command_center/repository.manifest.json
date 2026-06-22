@@ -1,0 +1,45 @@
+{
+  "apis": [
+    "/projects",
+    "/projects/{id}/status"
+  ],
+  "architecture": "layered FastAPI service with domain, service, API, audit, and metrics boundaries",
+  "dependencies": [
+    "change_order_agent",
+    "materials_intelligence"
+  ],
+  "documentation_requirements": [
+    "README",
+    "api",
+    "architecture",
+    "deployment"
+  ],
+  "domain": "construction",
+  "events": [
+    "project.alert_created",
+    "project.status_changed"
+  ],
+  "metadata": {
+    "capability": "contractor_command_center",
+    "industry": "construction",
+    "platform": "RenovationOS",
+    "quality_score": 1.0,
+    "release_readiness": "candidate"
+  },
+  "name": "contractor_command_center",
+  "observability": [
+    "active_projects",
+    "schedule_variance"
+  ],
+  "purpose": "Coordinate contractors, crews, quality, compliance, and milestones.",
+  "rbac_scopes": [
+    "projects:manage",
+    "projects:read"
+  ],
+  "repository_type": "frontend",
+  "tests": [
+    "accessibility",
+    "browser",
+    "unit"
+  ]
+}

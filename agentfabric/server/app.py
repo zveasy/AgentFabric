@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 import shutil
 import time
 from collections import defaultdict
@@ -82,6 +83,7 @@ from agentfabric.production.control_plane import ProductionControlPlane
 from agentfabric.quotas import LimitEnforcer, QuotaPolicy, QuotaTracker
 from agentfabric.reputation import ReputationService
 from agentfabric.recovery import ReplayRecoveryEngine
+from agentfabric.repository_execution import RepositoryExecutionEngine
 from agentfabric.domain_platforms import DomainPlatformDefinition
 from agentfabric.software_factory import SoftwareFoundryService
 from agentfabric.server.auth import AuthService, require_scopes
@@ -280,6 +282,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     event_store = EventStore(persistence=durable_store)
     operational_intelligence = OperationalIntelligenceService(durable_store, event_store)
     software_foundry = SoftwareFoundryService(durable_store, event_store)
+    repository_execution = RepositoryExecutionEngine(
+        persistence=durable_store,
+        event_store=event_store,
+        output_root=Path(settings.factory_output_root),
+        platform_root=Path(__file__).resolve().parents[2] / "platforms" / "renovation_os",
+    )
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
         event_store=event_store,
@@ -2195,6 +2203,119 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["factory:quality"])
         items = software_foundry.quality(ctx)
         return {"items": items, "total": len(items)}
+
+    @app.post("/factory/execution/plan", tags=["repository-execution"])
+    def factory_execution_plan(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            plan = repository_execution.plan(
+                ctx,
+                str(payload.get("repository_id") or payload["repository_name"]),
+                platform_id=str(payload.get("platform_id", "RenovationOS")),
+                blueprint_version=str(payload.get("blueprint_version", "1.0.0")),
+                knowledge_pack_version=str(payload.get("knowledge_pack_version", "1.0.0")),
+            )
+            return plan.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/execution/dry-run", tags=["repository-execution"])
+    def factory_execution_dry_run(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            return repository_execution.dry_run(ctx, str(payload["execution_id"])).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/execution/approve", tags=["repository-execution"])
+    def factory_execution_approve(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:admin"])
+        try:
+            return repository_execution.approve(ctx, str(payload["execution_id"])).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/execution/run", tags=["repository-execution"])
+    def factory_execution_run(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:execute"])
+        try:
+            result = repository_execution.execute(ctx, str(payload["execution_id"]))
+            metering.record(
+                ctx.tenant_id,
+                "factory_repository_executions",
+                metadata={"execution_id": result.execution_id},
+            )
+            return result.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/factory/execution/rollback", tags=["repository-execution"])
+    def factory_execution_rollback(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:admin"])
+        try:
+            return repository_execution.rollback(ctx, str(payload["execution_id"]))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/factory/execution/{execution_id}", tags=["repository-execution"])
+    def factory_execution_get(execution_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            plan = repository_execution.get(ctx, execution_id)
+            result = durable_store.get("factory_execution_results", execution_id)
+            return {"plan": plan.as_dict(), "result": result}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.get("/factory/execution/{execution_id}/events", tags=["repository-execution"])
+    def factory_execution_events(execution_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            items = repository_execution.events(ctx, execution_id)
+            return {"items": items, "total": len(items)}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.get("/factory/execution/{execution_id}/artifacts", tags=["repository-execution"])
+    def factory_execution_artifacts(execution_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["factory:read"])
+        try:
+            items = repository_execution.artifacts(ctx, execution_id)
+            return {"items": items, "total": len(items)}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
 
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):

@@ -1,0 +1,44 @@
+{
+  "apis": [
+    "/change-orders",
+    "/change-orders/{id}/review"
+  ],
+  "architecture": "layered FastAPI service with domain, service, API, audit, and metrics boundaries",
+  "dependencies": [
+    "reno_estimator"
+  ],
+  "documentation_requirements": [
+    "README",
+    "api",
+    "architecture",
+    "deployment"
+  ],
+  "domain": "construction",
+  "events": [
+    "change_order.approved",
+    "change_order.proposed"
+  ],
+  "metadata": {
+    "capability": "change_order_agent",
+    "industry": "construction",
+    "platform": "RenovationOS",
+    "quality_score": 1.0,
+    "release_readiness": "candidate"
+  },
+  "name": "change_order_agent",
+  "observability": [
+    "approval_latency",
+    "variance_detected"
+  ],
+  "purpose": "Govern renovation scope, cost, schedule, and approval changes.",
+  "rbac_scopes": [
+    "change_orders:approve",
+    "change_orders:read"
+  ],
+  "repository_type": "ai_agent",
+  "tests": [
+    "VEIL_boundary",
+    "governance",
+    "unit"
+  ]
+}
