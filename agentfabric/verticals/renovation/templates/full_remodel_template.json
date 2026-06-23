@@ -1,0 +1,56 @@
+{
+  "clauses": [
+    "Changes to scope require a written change order.",
+    "Permit and inspection responsibilities follow the project agreement.",
+    "Concealed conditions are excluded until documented by change order.",
+    "Final payment is due after substantial completion."
+  ],
+  "payment_terms": [
+    {
+      "label": "Deposit",
+      "percentage": 20
+    },
+    {
+      "label": "Demolition complete",
+      "percentage": 20
+    },
+    {
+      "label": "Rough construction complete",
+      "percentage": 25
+    },
+    {
+      "label": "Finish installation complete",
+      "percentage": 25
+    },
+    {
+      "label": "Closeout",
+      "percentage": 10
+    }
+  ],
+  "project_phases": [
+    {
+      "duration_days": 4,
+      "phase": "Planning and procurement"
+    },
+    {
+      "duration_days": 3,
+      "phase": "Demolition"
+    },
+    {
+      "duration_days": 8,
+      "phase": "Rough construction"
+    },
+    {
+      "duration_days": 7,
+      "phase": "Finish installation"
+    },
+    {
+      "duration_days": 2,
+      "phase": "Inspection and closeout"
+    }
+  ],
+  "style": "full_remodel",
+  "template_id": "full_remodel_template",
+  "version": "1.0.0",
+  "warranty_months": 18
+}

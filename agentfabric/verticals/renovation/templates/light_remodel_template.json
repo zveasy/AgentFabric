@@ -1,0 +1,34 @@
+{
+  "clauses": [
+    "Work is limited to the listed cosmetic and replacement scope.",
+    "Concealed conditions are excluded until documented by change order."
+  ],
+  "payment_terms": [
+    {
+      "label": "Deposit",
+      "percentage": 40
+    },
+    {
+      "label": "Completion",
+      "percentage": 60
+    }
+  ],
+  "project_phases": [
+    {
+      "duration_days": 1,
+      "phase": "Preparation"
+    },
+    {
+      "duration_days": 3,
+      "phase": "Remodel work"
+    },
+    {
+      "duration_days": 1,
+      "phase": "Closeout"
+    }
+  ],
+  "style": "light_remodel",
+  "template_id": "light_remodel_template",
+  "version": "1.0.0",
+  "warranty_months": 6
+}

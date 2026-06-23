@@ -80,3 +80,7 @@ The software foundry now has a distinct execution boundary. `repository_material
 # Generation 19: Controlled Build Workers
 
 `build_workers` consumes only completed approved repository executions. Capability-scoped workers generate a deterministic product delta, tests, documentation, quality evidence, and security evidence. A separate approval binds the output hashes before writes occur. Rollback restores exact pre-build contents, and audit exports retain hashes and decisions without source contents.
+
+# Generation R1: RenovationOS Foundation
+
+`verticals.renovation` is the first vertical product package. It uses canonical serializable models, local versioned cost assumptions, versioned JSON templates, tenant-scoped persistence, and hash-chained events to create estimates and proposals without network or AI-provider dependencies. Persisted inputs support exact replay and audit export.

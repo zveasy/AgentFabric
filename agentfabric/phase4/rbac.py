@@ -417,6 +417,16 @@ class RbacService:
     ROLE_PERMISSIONS["auditor"].update({"factory:read", "factory:quality"})
     ROLE_PERMISSIONS["service_account"].update({"factory:read", "factory:execute"})
 
+    renovation_read = {"renovation.estimate.read", "renovation.proposal.read"}
+    renovation_write = {"renovation.estimate.write", "renovation.proposal.write"}
+    ROLE_PERMISSIONS["admin"].update(renovation_read | renovation_write)
+    ROLE_PERMISSIONS["developer"].update(renovation_read | renovation_write)
+    ROLE_PERMISSIONS["operator"].update(renovation_read | renovation_write)
+    ROLE_PERMISSIONS["reviewer"].update(renovation_read)
+    ROLE_PERMISSIONS["auditor"].update(renovation_read)
+    ROLE_PERMISSIONS["viewer"].update(renovation_read)
+    ROLE_PERMISSIONS["service_account"].update(renovation_read | renovation_write)
+
     ROLE_PERMISSIONS["owner"] = set().union(*ROLE_PERMISSIONS.values()) | {
         "auth.admin",
         "members.manage",

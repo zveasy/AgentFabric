@@ -56,6 +56,9 @@ class AuditBundle:
     factory_build_artifacts: list[dict[str, object]]
     factory_build_reviews: list[dict[str, object]]
     factory_build_rollbacks: list[dict[str, object]]
+    renovation_estimates: list[dict[str, object]]
+    renovation_proposals: list[dict[str, object]]
+    renovation_proposal_exports: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         value = {
@@ -105,6 +108,9 @@ class AuditBundle:
             "factory_build_artifacts": self.factory_build_artifacts,
             "factory_build_reviews": self.factory_build_reviews,
             "factory_build_rollbacks": self.factory_build_rollbacks,
+            "renovation_estimates": self.renovation_estimates,
+            "renovation_proposals": self.renovation_proposals,
+            "renovation_proposal_exports": self.renovation_proposal_exports,
         }
         redacted = redact(value)
         if contains_raw_sensitive(redacted):

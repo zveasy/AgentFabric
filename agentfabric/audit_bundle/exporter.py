@@ -70,6 +70,12 @@ class AuditBundleExporter:
             factory_build_artifacts=self.persistence.list_tenant("factory_build_artifacts", tenant_id),
             factory_build_reviews=self.persistence.list_tenant("factory_build_reviews", tenant_id),
             factory_build_rollbacks=self.persistence.list_tenant("factory_build_rollbacks", tenant_id),
+            renovation_estimates=_renovation_artifacts(self.persistence, "renovation_estimates", tenant_id),
+            renovation_proposals=_renovation_artifacts(self.persistence, "renovation_proposals", tenant_id),
+            renovation_proposal_exports=self.persistence.list_tenant(
+                "renovation_proposal_exports",
+                tenant_id,
+            ),
         )
         return bundle
 
@@ -99,3 +105,19 @@ def _build_plans(
     for plan in plans:
         plan.pop("artifact_contents", None)
     return plans
+
+
+def _renovation_artifacts(
+    persistence: PersistenceStore,
+    collection: str,
+    tenant_id: str,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "tenant_id": item["tenant_id"],
+            "organization_id": item["organization_id"],
+            "created_by": item["created_by"],
+            "artifact": item["artifact"],
+        }
+        for item in persistence.list_tenant(collection, tenant_id)
+    ]

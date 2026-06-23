@@ -1,0 +1,39 @@
+{
+  "clauses": [
+    "Changes to scope require a written change order.",
+    "Customer will provide reasonable site access during scheduled work.",
+    "Final payment is due after substantial completion."
+  ],
+  "payment_terms": [
+    {
+      "label": "Deposit",
+      "percentage": 30
+    },
+    {
+      "label": "Progress payment",
+      "percentage": 40
+    },
+    {
+      "label": "Completion",
+      "percentage": 30
+    }
+  ],
+  "project_phases": [
+    {
+      "duration_days": 2,
+      "phase": "Planning and procurement"
+    },
+    {
+      "duration_days": 5,
+      "phase": "Construction"
+    },
+    {
+      "duration_days": 1,
+      "phase": "Inspection and closeout"
+    }
+  ],
+  "style": "standard",
+  "template_id": "standard_proposal",
+  "version": "1.0.0",
+  "warranty_months": 12
+}

@@ -1,0 +1,48 @@
+{
+  "clauses": [
+    "Changes to scope require a written change order.",
+    "Customer will provide reasonable site access during scheduled work.",
+    "Premium project reporting is provided at each phase.",
+    "Final payment is due after substantial completion and closeout review."
+  ],
+  "payment_terms": [
+    {
+      "label": "Design and procurement",
+      "percentage": 20
+    },
+    {
+      "label": "Project start",
+      "percentage": 30
+    },
+    {
+      "label": "Midpoint",
+      "percentage": 30
+    },
+    {
+      "label": "Completion",
+      "percentage": 20
+    }
+  ],
+  "project_phases": [
+    {
+      "duration_days": 3,
+      "phase": "Design confirmation"
+    },
+    {
+      "duration_days": 4,
+      "phase": "Procurement"
+    },
+    {
+      "duration_days": 7,
+      "phase": "Construction"
+    },
+    {
+      "duration_days": 2,
+      "phase": "Quality review and closeout"
+    }
+  ],
+  "style": "premium",
+  "template_id": "premium_proposal",
+  "version": "1.0.0",
+  "warranty_months": 24
+}

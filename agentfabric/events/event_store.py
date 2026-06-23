@@ -176,6 +176,10 @@ EVENT_TYPE_REGISTRY = {
     "factory.build.review.completed",
     "factory.build.rolled_back",
     "factory.build.replayed",
+    "renovation.estimate_created",
+    "renovation.estimate_updated",
+    "renovation.proposal_generated",
+    "renovation.proposal_exported",
     *(item.value for item in EventType),
 }
 

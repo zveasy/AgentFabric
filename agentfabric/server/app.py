@@ -112,6 +112,7 @@ from agentfabric.server.schemas import (
 from agentfabric.server.services import AuditService, BillingService, PackageService, QueueService
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
 from agentfabric.tools import ToolManifest, ToolPermission, ToolRegistry, ToolRouter
+from agentfabric.verticals.renovation import RenovationFoundationService
 from veil_client import MockVeilClient
 
 HTTP_REQUEST_COUNT = Counter(
@@ -295,6 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         execution_engine=repository_execution,
         output_root=Path(settings.factory_output_root),
     )
+    renovation = RenovationFoundationService(durable_store, event_store)
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
         event_store=event_store,
@@ -2453,6 +2455,79 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc))
         except AuthorizationError as exc:
             raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/estimate", tags=["renovation-os"])
+    def renovation_estimate_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.estimate.write"])
+        try:
+            estimate = renovation.create_estimate(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_estimates",
+                metadata={"estimate_id": estimate.estimate_id},
+            )
+            return estimate.as_dict()
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/estimate/{estimate_id}", tags=["renovation-os"])
+    def renovation_estimate_get(estimate_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.estimate.read"])
+        try:
+            return renovation.get_estimate(ctx, estimate_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/proposal", tags=["renovation-os"])
+    def renovation_proposal_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.proposal.write"])
+        try:
+            proposal = renovation.create_proposal(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_proposals",
+                metadata={"proposal_id": proposal.proposal_id},
+            )
+            return proposal.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/proposal/{proposal_id}", tags=["renovation-os"])
+    def renovation_proposal_get(proposal_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.proposal.read"])
+        try:
+            return renovation.get_proposal(ctx, proposal_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/proposal/export", tags=["renovation-os"])
+    def renovation_proposal_export(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.proposal.write"])
+        try:
+            return renovation.export_proposal(
+                ctx,
+                str(payload["proposal_id"]),
+                str(payload.get("format", "json")),
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):

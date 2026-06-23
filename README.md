@@ -12,6 +12,8 @@ Generation 18 adds approval-gated repository execution. AgentFabric can now plan
 
 Generation 19 adds controlled build workers that convert approved scaffolds into tested first-pass product logic. RenovationOS now includes a deterministic estimator, governed change-order lifecycle, and contractor operations/reliability logic.
 
+Generation R1 adds the RenovationOS Foundation vertical: persisted, tenant-scoped estimate and professional proposal generation using local rate tables and versioned templates with no external AI dependency.
+
 This repository now carries two parallel shapes:
 
 - The existing `agentfabric/` implementation, kept intact for compatibility with the current test surface.
@@ -66,6 +68,7 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/repository_lifecycle`, `agentfabric/repository_graph`, `agentfabric/software_teams`: lifecycle, lineage, impact, and team coordination.
 - `agentfabric/repository_execution`, `agentfabric/repository_materializer`: approved execution plans, safe artifact writes, deterministic RenovationOS source trees, replay, and rollback.
 - `agentfabric/build_workers`: capability-scoped domain, service, API, test, documentation, quality, and security workers with build approval, replay, review, and rollback.
+- `agentfabric/verticals/renovation`: offline deterministic renovation estimates, proposal templates, replay, exports, events, and marketplace metadata.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -154,3 +157,17 @@ See [docs/repository_execution.md](docs/repository_execution.md) for the executi
 Build worker APIs are exposed under `/factory/build`. A build requires a completed approved repository execution, then passes through deterministic planning, dry-run validation, a separate approval, execution, security review, and optional rollback.
 
 See [docs/build_workers.md](docs/build_workers.md) for worker governance and [docs/renovation_os_product_logic.md](docs/renovation_os_product_logic.md) for the implemented product behavior.
+
+## Vertical Solutions
+
+RenovationOS Foundation is the first production vertical. It turns persisted project scope, room dimensions, quantities, and local rates into reproducible estimates and template-driven customer proposals.
+
+## Marketplace
+
+The vertical catalog includes **RenovationOS Foundation** under Construction and Operations. It declares estimate generation, proposal generation, offline deterministic execution, tenant isolation, and replay support.
+
+## API Reference
+
+Renovation APIs are available under `/renovation` for estimate creation/read and proposal creation/read/export. RBAC scopes are `renovation.estimate.read`, `renovation.estimate.write`, `renovation.proposal.read`, and `renovation.proposal.write`.
+
+See [docs/renovationos_foundation.md](docs/renovationos_foundation.md) for architecture, models, templates, replay behavior, and example requests.

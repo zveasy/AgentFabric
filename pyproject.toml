@@ -56,6 +56,9 @@ include = [
     "veil_client*",
 ]
 
+[tool.setuptools.package-data]
+"agentfabric.verticals.renovation.templates" = ["*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py39"
