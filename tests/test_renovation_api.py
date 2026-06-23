@@ -10,12 +10,16 @@ from agentfabric.server.app import create_app
 from agentfabric.server.config import Settings
 
 from tests.renovation_helpers import (
+    AVAILABILITY_PAYLOAD,
     CHANGE_ORDER_PAYLOAD,
+    CREW_PAYLOAD,
     DAILY_LOG_PAYLOAD,
+    DELIVERY_PAYLOAD,
     ESTIMATE_PAYLOAD,
     FIELD_NOTE_PAYLOAD,
     JOB_PAYLOAD,
     PROPOSAL_PAYLOAD,
+    SCHEDULE_PAYLOAD,
 )
 
 
@@ -196,3 +200,102 @@ class RenovationApiTests(unittest.TestCase):
         )
         self.assertEqual(history.status_code, 200)
         self.assertTrue(history.json()["history"]["change_orders"])
+
+    def test_schedule_crew_delivery_and_summary_apis(self) -> None:
+        estimate_id = self.client.post(
+            "/renovation/estimate",
+            json=ESTIMATE_PAYLOAD,
+            headers=self.headers,
+        ).json()["estimate_id"]
+        proposal_id = self.client.post(
+            "/renovation/proposal",
+            json={**PROPOSAL_PAYLOAD, "estimate_id": estimate_id},
+            headers=self.headers,
+        ).json()["proposal_id"]
+        job_id = self.client.post(
+            "/renovation/jobs",
+            json={**JOB_PAYLOAD, "proposal_id": proposal_id},
+            headers=self.headers,
+        ).json()["job_id"]
+        schedule_response = self.client.post(
+            "/renovation/schedules",
+            json={**SCHEDULE_PAYLOAD, "job_id": job_id},
+            headers=self.headers,
+        )
+        self.assertEqual(schedule_response.status_code, 200)
+        schedule = schedule_response.json()
+        crew_response = self.client.post(
+            "/renovation/crews",
+            json=CREW_PAYLOAD,
+            headers=self.headers,
+        )
+        self.assertEqual(crew_response.status_code, 200)
+        crew_id = crew_response.json()["crew_id"]
+        self.assertEqual(
+            self.client.post(
+                f"/renovation/crews/{crew_id}/availability",
+                json=AVAILABILITY_PAYLOAD,
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/renovation/crew-assignments",
+                json={
+                    "crew_id": crew_id,
+                    "schedule_id": schedule["schedule_id"],
+                    "phase_id": schedule["phases"][0]["phase_id"],
+                },
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/renovation/material-deliveries",
+                json={
+                    **DELIVERY_PAYLOAD,
+                    "schedule_id": schedule["schedule_id"],
+                    "phase_id": schedule["phases"][0]["phase_id"],
+                },
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        recalculated = self.client.post(
+            f"/renovation/schedules/{schedule['schedule_id']}/recalculate",
+            json={},
+            headers=self.headers,
+        )
+        self.assertEqual(recalculated.status_code, 200)
+        self.assertEqual(recalculated.json()["status"], "delayed")
+        self.assertEqual(
+            self.client.get(
+                f"/renovation/schedules/{schedule['schedule_id']}",
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        summary = self.client.get(
+            f"/renovation/jobs/{job_id}/schedule-summary",
+            headers=self.headers,
+        )
+        self.assertEqual(summary.status_code, 200)
+        self.assertTrue(summary.json()["summary_hash"])
+        viewer = self._principal("viewer-r3", "tenant-a", "viewer")
+        self.assertEqual(
+            self.client.get(
+                f"/renovation/crews/{crew_id}",
+                headers=viewer,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/renovation/crews",
+                json=CREW_PAYLOAD,
+                headers=viewer,
+            ).status_code,
+            403,
+        )

@@ -111,6 +111,46 @@ CHANGE_ORDER_PAYLOAD = {
     "status": "sent",
 }
 
+SCHEDULE_PAYLOAD = {
+    "start_date": "2026-07-06",
+}
+
+CREW_PAYLOAD = {
+    "name": "North Crew",
+    "members": [
+        {
+            "member_id": "member-lead",
+            "name": "Alex Builder",
+            "role": "lead",
+            "skills": ["flooring", "cabinetry"],
+        },
+        {
+            "member_id": "member-helper",
+            "name": "Taylor Builder",
+            "role": "installer",
+            "skills": ["flooring"],
+        },
+    ],
+    "skills": ["cabinetry", "flooring"],
+}
+
+AVAILABILITY_PAYLOAD = {
+    "start_date": "2026-07-06",
+    "end_date": "2026-07-07",
+    "status": "unavailable",
+    "note": "Prior committed project",
+}
+
+DELIVERY_PAYLOAD = {
+    "material": "Kitchen cabinets",
+    "quantity": 1,
+    "unit": "lot",
+    "required_date": "2026-07-06",
+    "expected_date": "2026-07-09",
+    "status": "delayed",
+    "supplier_reference": "supplier-order-100",
+}
+
 
 def service_fixture():
     persistence = MemoryPersistenceStore()
@@ -132,3 +172,13 @@ def job_fixture():
         {**JOB_PAYLOAD, "proposal_id": proposal.proposal_id},
     )
     return persistence, events, service, context, estimate, proposal, job
+
+
+def schedule_fixture():
+    persistence, events, service, context, estimate, proposal, job = job_fixture()
+    schedule = service.create_schedule(
+        context,
+        {**SCHEDULE_PAYLOAD, "job_id": job.job_id},
+    )
+    crew = service.create_crew(context, CREW_PAYLOAD)
+    return persistence, events, service, context, estimate, proposal, job, schedule, crew

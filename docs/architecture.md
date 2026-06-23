@@ -88,3 +88,7 @@ The software foundry now has a distinct execution boundary. `repository_material
 # Generation R2: RenovationOS Operations
 
 The renovation vertical now carries accepted proposals into job execution. `jobs` owns phased job state, `documentation` owns deterministic daily logs, notes, photo metadata, issues, and summaries, and `change_orders` reuses estimate assumptions for price adjustments and approval-ready documents. The facade enforces tenant ownership and reconstructs complete project histories for replay and audit.
+
+# Generation R3: RenovationOS Scheduling
+
+RenovationOS execution planning adds dependency-aware schedules, crew availability and assignments, material deliveries, conflict detection, blocked-phase analysis, deterministic completion-date recalculation, replay evidence, and customer schedule summaries.

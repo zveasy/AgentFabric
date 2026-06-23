@@ -68,6 +68,14 @@ class AuditBundle:
     renovation_change_orders: list[dict[str, object]]
     renovation_change_order_approvals: list[dict[str, object]]
     renovation_change_order_exports: list[dict[str, object]]
+    renovation_schedules: list[dict[str, object]]
+    renovation_schedule_recalculations: list[dict[str, object]]
+    renovation_schedule_summaries: list[dict[str, object]]
+    renovation_crews: list[dict[str, object]]
+    renovation_crew_assignments: list[dict[str, object]]
+    renovation_crew_availability: list[dict[str, object]]
+    renovation_material_deliveries: list[dict[str, object]]
+    renovation_delay_impacts: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         value = {
@@ -129,6 +137,14 @@ class AuditBundle:
             "renovation_change_orders": self.renovation_change_orders,
             "renovation_change_order_approvals": self.renovation_change_order_approvals,
             "renovation_change_order_exports": self.renovation_change_order_exports,
+            "renovation_schedules": self.renovation_schedules,
+            "renovation_schedule_recalculations": self.renovation_schedule_recalculations,
+            "renovation_schedule_summaries": self.renovation_schedule_summaries,
+            "renovation_crews": self.renovation_crews,
+            "renovation_crew_assignments": self.renovation_crew_assignments,
+            "renovation_crew_availability": self.renovation_crew_availability,
+            "renovation_material_deliveries": self.renovation_material_deliveries,
+            "renovation_delay_impacts": self.renovation_delay_impacts,
         }
         redacted = redact(value)
         if contains_raw_sensitive(redacted):

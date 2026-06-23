@@ -13,6 +13,8 @@ from .change_orders import (
     ChangeOrderLine,
     ChangeOrderService,
 )
+from .crews import Crew, CrewAssignment, CrewAvailability, CrewMember, CrewService
+from .deliveries import DeliveryService, MaterialDelivery
 from .documentation import (
     DailyLog,
     DocumentationService,
@@ -26,16 +28,26 @@ from .events import (
     CHANGE_ORDER_CREATED,
     CHANGE_ORDER_EXPORTED,
     CHANGE_ORDER_REJECTED,
+    CREW_ASSIGNED,
+    CREW_AVAILABILITY_UPDATED,
+    CREW_CREATED,
+    CREW_UNASSIGNED,
     DAILY_LOG_CREATED,
+    DELAY_DETECTED,
     ESTIMATE_CREATED,
     ESTIMATE_UPDATED,
     FIELD_NOTE_ADDED,
     ISSUE_RECORD_ADDED,
     JOB_CREATED,
     JOB_UPDATED,
+    MATERIAL_DELIVERY_CREATED,
+    MATERIAL_DELIVERY_UPDATED,
     PHOTO_RECORD_ADDED,
     PROPOSAL_EXPORTED,
     PROPOSAL_GENERATED,
+    SCHEDULE_CREATED,
+    SCHEDULE_RECALCULATED,
+    SCHEDULE_UPDATED,
 )
 from .jobs import Job, JobPhase, JobService
 from .marketplace import RENOVATION_FOUNDATION_PACKAGE
@@ -51,6 +63,14 @@ from .models import (
     Timeline,
 )
 from .proposal import ProposalService
+from .scheduling import (
+    DelayImpact,
+    PhaseDependency,
+    Schedule,
+    ScheduleConflict,
+    SchedulePhase,
+    SchedulingService,
+)
 
 
 class RenovationFoundationService:
@@ -62,6 +82,9 @@ class RenovationFoundationService:
         self.jobs = JobService()
         self.documentation = DocumentationService()
         self.change_orders = ChangeOrderService()
+        self.scheduling = SchedulingService()
+        self.crews = CrewService()
+        self.deliveries = DeliveryService()
         self.persistence.put(
             "renovation_marketplace_packages",
             str(RENOVATION_FOUNDATION_PACKAGE["package_id"]),
@@ -378,6 +401,11 @@ class RenovationFoundationService:
             "change_orders": "renovation_change_orders",
             "approvals": "renovation_change_order_approvals",
             "change_order_exports": "renovation_change_order_exports",
+            "schedules": "renovation_schedules",
+            "crew_assignments": "renovation_crew_assignments",
+            "material_deliveries": "renovation_material_deliveries",
+            "delay_impacts": "renovation_delay_impacts",
+            "schedule_summaries": "renovation_schedule_summaries",
         }
         history: dict[str, object] = {
             "job": job.as_dict(),
@@ -615,6 +643,417 @@ class RenovationFoundationService:
             ),
         )
         return export
+
+    def create_schedule(self, ctx: TenantContext, payload: dict[str, object]) -> Schedule:
+        job = self.get_job(ctx, str(payload["job_id"]))
+        schedule = self.scheduling.create(ctx.tenant_id, job, payload)
+        self.persistence.put(
+            "renovation_schedules",
+            schedule.schedule_id,
+            {
+                **self._record(ctx, payload, schedule.as_dict()),
+                "job_id": job.job_id,
+            },
+        )
+        self.event_store.append(
+            SCHEDULE_CREATED,
+            schedule.schedule_id,
+            self._event_payload(
+                ctx,
+                job_id=job.job_id,
+                schedule_id=schedule.schedule_id,
+                schedule_hash=schedule.schedule_hash,
+            ),
+        )
+        return schedule
+
+    def get_schedule(self, ctx: TenantContext, schedule_id: str) -> Schedule:
+        value = self._tenant_record(
+            ctx,
+            "renovation_schedules",
+            schedule_id,
+            "schedule",
+        )
+        return _schedule_from_dict(dict(value["artifact"]))
+
+    def replay_schedule(self, ctx: TenantContext, schedule_id: str) -> Schedule:
+        value = self._tenant_record(
+            ctx,
+            "renovation_schedules",
+            schedule_id,
+            "schedule",
+        )
+        payload = dict(value["input"])
+        job = self.get_job(ctx, str(payload["job_id"]))
+        replayed = self.scheduling.create(ctx.tenant_id, job, payload)
+        evidence = sorted(
+            (
+                item
+                for item in self.persistence.list_tenant(
+                    "renovation_schedule_recalculations",
+                    ctx.tenant_id,
+                )
+                if item.get("schedule_id") == schedule_id
+            ),
+            key=lambda item: int(item["revision"]),
+        )
+        for item in evidence:
+            replayed = self.scheduling.recalculate(
+                replayed,
+                tuple(
+                    _crew_assignment_from_dict(dict(record))
+                    for record in item["assignments"]
+                ),
+                tuple(
+                    _crew_availability_from_dict(dict(record))
+                    for record in item["availability"]
+                ),
+                tuple(
+                    _material_delivery_from_dict(dict(record))
+                    for record in item["deliveries"]
+                ),
+                dict(item["input"]),
+            )
+        original = _schedule_from_dict(dict(value["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation schedule replay diverged")
+        return replayed
+
+    def recalculate_schedule(
+        self,
+        ctx: TenantContext,
+        schedule_id: str,
+        payload: dict[str, object],
+    ) -> Schedule:
+        schedule = self.get_schedule(ctx, schedule_id)
+        assignments = tuple(
+            _crew_assignment_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_crew_assignments",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("status") != "cancelled"
+        )
+        availability = tuple(
+            _crew_availability_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_crew_availability",
+                ctx.tenant_id,
+            )
+        )
+        deliveries = tuple(
+            _material_delivery_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_material_deliveries",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("schedule_id") == schedule_id
+        )
+        recalculated = self.scheduling.recalculate(
+            schedule,
+            assignments,
+            availability,
+            deliveries,
+            payload,
+        )
+        record = self._tenant_record(
+            ctx,
+            "renovation_schedules",
+            schedule_id,
+            "schedule",
+        )
+        record["artifact"] = recalculated.as_dict()
+        self.persistence.put("renovation_schedules", schedule_id, record)
+        evidence = {
+            "tenant_id": ctx.tenant_id,
+            "organization_id": ctx.organization_id,
+            "created_by": ctx.principal_id,
+            "schedule_id": schedule_id,
+            "revision": recalculated.revision,
+            "input": payload,
+            "assignments": [item.as_dict() for item in assignments],
+            "availability": [item.as_dict() for item in availability],
+            "deliveries": [item.as_dict() for item in deliveries],
+            "schedule_hash": recalculated.schedule_hash,
+        }
+        self.persistence.put(
+            "renovation_schedule_recalculations",
+            f"{schedule_id}:{recalculated.revision:06d}",
+            evidence,
+        )
+        for impact in recalculated.delay_impacts:
+            self.persistence.put(
+                "renovation_delay_impacts",
+                impact.delay_id,
+                {
+                    "tenant_id": ctx.tenant_id,
+                    "organization_id": ctx.organization_id,
+                    "created_by": ctx.principal_id,
+                    "job_id": recalculated.job_id,
+                    "artifact": impact.as_dict(),
+                },
+            )
+            self.event_store.append(
+                DELAY_DETECTED,
+                impact.delay_id,
+                self._event_payload(
+                    ctx,
+                    job_id=recalculated.job_id,
+                    schedule_id=schedule_id,
+                    delay_id=impact.delay_id,
+                    delay_days=impact.delay_days,
+                ),
+            )
+        self.event_store.append(
+            SCHEDULE_RECALCULATED,
+            schedule_id,
+            self._event_payload(
+                ctx,
+                job_id=recalculated.job_id,
+                schedule_id=schedule_id,
+                revision=recalculated.revision,
+                projected_completion_date=recalculated.projected_completion_date,
+                schedule_hash=recalculated.schedule_hash,
+            ),
+        )
+        self.event_store.append(
+            SCHEDULE_UPDATED,
+            schedule_id,
+            self._event_payload(
+                ctx,
+                job_id=recalculated.job_id,
+                schedule_id=schedule_id,
+                update_type="recalculation",
+            ),
+        )
+        return recalculated
+
+    def schedule_summary(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
+        self.get_job(ctx, job_id)
+        schedules = [
+            _schedule_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_schedules",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job_id
+        ]
+        if not schedules:
+            raise NotFoundError("renovation schedule not found")
+        schedule = sorted(
+            schedules,
+            key=lambda item: (item.revision, item.schedule_id),
+        )[-1]
+        summary = self.scheduling.customer_summary(schedule)
+        self.persistence.put(
+            "renovation_schedule_summaries",
+            f"{schedule.schedule_id}:{schedule.revision:06d}",
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "job_id": job_id,
+                **summary,
+            },
+        )
+        return summary
+
+    def create_crew(self, ctx: TenantContext, payload: dict[str, object]) -> Crew:
+        crew = self.crews.create(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_crews",
+            crew.crew_id,
+            self._record(ctx, payload, crew.as_dict()),
+        )
+        self.event_store.append(
+            CREW_CREATED,
+            crew.crew_id,
+            self._event_payload(
+                ctx,
+                crew_id=crew.crew_id,
+                artifact_hash=_artifact_hash(crew.export_json()),
+            ),
+        )
+        return crew
+
+    def get_crew(self, ctx: TenantContext, crew_id: str) -> Crew:
+        value = self._tenant_record(ctx, "renovation_crews", crew_id, "crew")
+        return _crew_from_dict(dict(value["artifact"]))
+
+    def update_crew_availability(
+        self,
+        ctx: TenantContext,
+        crew_id: str,
+        payload: dict[str, object],
+    ) -> CrewAvailability:
+        self.get_crew(ctx, crew_id)
+        availability = self.crews.availability(ctx.tenant_id, crew_id, payload)
+        self.persistence.put(
+            "renovation_crew_availability",
+            availability.availability_id,
+            self._record(ctx, payload, availability.as_dict()),
+        )
+        self.event_store.append(
+            CREW_AVAILABILITY_UPDATED,
+            availability.availability_id,
+            self._event_payload(
+                ctx,
+                crew_id=crew_id,
+                availability_id=availability.availability_id,
+                status=availability.status,
+            ),
+        )
+        return availability
+
+    def create_crew_assignment(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> CrewAssignment:
+        crew = self.get_crew(ctx, str(payload["crew_id"]))
+        schedule = self.get_schedule(ctx, str(payload["schedule_id"]))
+        if str(payload.get("job_id", schedule.job_id)) != schedule.job_id:
+            raise AuthorizationError("crew assignment job does not match schedule")
+        phase_id = str(payload["phase_id"])
+        phase = next(
+            (item for item in schedule.phases if item.phase_id == phase_id),
+            None,
+        )
+        if phase is None:
+            raise NotFoundError("renovation schedule phase not found")
+        assignment = self.crews.assignment(
+            ctx.tenant_id,
+            crew.crew_id,
+            schedule.job_id,
+            schedule.schedule_id,
+            phase_id,
+            str(payload.get("start_date", phase.planned_start)),
+            str(payload.get("end_date", phase.planned_end)),
+            payload,
+        )
+        self.persistence.put(
+            "renovation_crew_assignments",
+            assignment.assignment_id,
+            {
+                **self._record(ctx, payload, assignment.as_dict()),
+                "job_id": schedule.job_id,
+                "schedule_id": schedule.schedule_id,
+            },
+        )
+        self.event_store.append(
+            CREW_ASSIGNED,
+            assignment.assignment_id,
+            self._event_payload(
+                ctx,
+                job_id=schedule.job_id,
+                schedule_id=schedule.schedule_id,
+                phase_id=phase_id,
+                crew_id=crew.crew_id,
+                assignment_id=assignment.assignment_id,
+            ),
+        )
+        return assignment
+
+    def unassign_crew(
+        self,
+        ctx: TenantContext,
+        assignment_id: str,
+    ) -> CrewAssignment:
+        record = self._tenant_record(
+            ctx,
+            "renovation_crew_assignments",
+            assignment_id,
+            "crew assignment",
+        )
+        assignment = self.crews.unassign(
+            _crew_assignment_from_dict(dict(record["artifact"]))
+        )
+        record["artifact"] = assignment.as_dict()
+        self.persistence.put("renovation_crew_assignments", assignment_id, record)
+        self.event_store.append(
+            CREW_UNASSIGNED,
+            assignment_id,
+            self._event_payload(
+                ctx,
+                job_id=assignment.job_id,
+                schedule_id=assignment.schedule_id,
+                phase_id=assignment.phase_id,
+                crew_id=assignment.crew_id,
+                assignment_id=assignment_id,
+            ),
+        )
+        return assignment
+
+    def create_material_delivery(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> MaterialDelivery:
+        schedule = self.get_schedule(ctx, str(payload["schedule_id"]))
+        if str(payload.get("job_id", schedule.job_id)) != schedule.job_id:
+            raise AuthorizationError("material delivery job does not match schedule")
+        phase_id = str(payload["phase_id"])
+        if phase_id not in {item.phase_id for item in schedule.phases}:
+            raise NotFoundError("renovation schedule phase not found")
+        delivery = self.deliveries.create(
+            ctx.tenant_id,
+            schedule.job_id,
+            schedule.schedule_id,
+            phase_id,
+            payload,
+        )
+        self.persistence.put(
+            "renovation_material_deliveries",
+            delivery.delivery_id,
+            {
+                **self._record(ctx, payload, delivery.as_dict()),
+                "job_id": schedule.job_id,
+                "schedule_id": schedule.schedule_id,
+            },
+        )
+        self.event_store.append(
+            MATERIAL_DELIVERY_CREATED,
+            delivery.delivery_id,
+            self._event_payload(
+                ctx,
+                job_id=schedule.job_id,
+                schedule_id=schedule.schedule_id,
+                phase_id=phase_id,
+                delivery_id=delivery.delivery_id,
+                status=delivery.status,
+            ),
+        )
+        return delivery
+
+    def update_material_delivery(
+        self,
+        ctx: TenantContext,
+        delivery_id: str,
+        payload: dict[str, object],
+    ) -> MaterialDelivery:
+        record = self._tenant_record(
+            ctx,
+            "renovation_material_deliveries",
+            delivery_id,
+            "material delivery",
+        )
+        current = _material_delivery_from_dict(dict(record["artifact"]))
+        updated = self.deliveries.update(current, payload)
+        record["artifact"] = updated.as_dict()
+        record["last_update"] = payload
+        self.persistence.put("renovation_material_deliveries", delivery_id, record)
+        self.event_store.append(
+            MATERIAL_DELIVERY_UPDATED,
+            delivery_id,
+            self._event_payload(
+                ctx,
+                job_id=updated.job_id,
+                schedule_id=updated.schedule_id,
+                delivery_id=delivery_id,
+                status=updated.status,
+            ),
+        )
+        return updated
 
     def _persist_photo(
         self,
@@ -906,4 +1345,150 @@ def _change_order_from_dict(value: dict[str, object]) -> ChangeOrder:
             for item in value["approval_history"]
         ),
         rendered_text=str(value["rendered_text"]),
+    )
+
+
+def _crew_member_from_dict(value: dict[str, object]) -> CrewMember:
+    return CrewMember(
+        member_id=str(value["member_id"]),
+        name=str(value["name"]),
+        role=str(value["role"]),
+        skills=tuple(str(item) for item in value.get("skills", ())),
+    )
+
+
+def _crew_from_dict(value: dict[str, object]) -> Crew:
+    return Crew(
+        crew_id=str(value["crew_id"]),
+        tenant_id=str(value["tenant_id"]),
+        name=str(value["name"]),
+        members=tuple(
+            _crew_member_from_dict(dict(item)) for item in value.get("members", ())
+        ),
+        skills=tuple(str(item) for item in value.get("skills", ())),
+        active=bool(value.get("active", True)),
+    )
+
+
+def _crew_availability_from_dict(value: dict[str, object]) -> CrewAvailability:
+    return CrewAvailability(
+        availability_id=str(value["availability_id"]),
+        tenant_id=str(value["tenant_id"]),
+        crew_id=str(value["crew_id"]),
+        start_date=str(value["start_date"]),
+        end_date=str(value["end_date"]),
+        status=str(value["status"]),
+        note=str(value.get("note", "")),
+    )
+
+
+def _crew_assignment_from_dict(value: dict[str, object]) -> CrewAssignment:
+    return CrewAssignment(
+        assignment_id=str(value["assignment_id"]),
+        tenant_id=str(value["tenant_id"]),
+        crew_id=str(value["crew_id"]),
+        job_id=str(value["job_id"]),
+        schedule_id=str(value["schedule_id"]),
+        phase_id=str(value["phase_id"]),
+        start_date=str(value["start_date"]),
+        end_date=str(value["end_date"]),
+        status=str(value.get("status", "assigned")),
+    )
+
+
+def _material_delivery_from_dict(value: dict[str, object]) -> MaterialDelivery:
+    return MaterialDelivery(
+        delivery_id=str(value["delivery_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        schedule_id=str(value["schedule_id"]),
+        phase_id=str(value["phase_id"]),
+        material=str(value["material"]),
+        quantity=float(value["quantity"]),
+        unit=str(value["unit"]),
+        required_date=str(value["required_date"]),
+        expected_date=str(value["expected_date"]),
+        actual_date=str(value.get("actual_date", "")),
+        status=str(value["status"]),
+        supplier_reference=str(value.get("supplier_reference", "")),
+    )
+
+
+def _phase_dependency_from_dict(value: dict[str, object]) -> PhaseDependency:
+    return PhaseDependency(
+        predecessor_phase_id=str(value["predecessor_phase_id"]),
+        successor_phase_id=str(value["successor_phase_id"]),
+        dependency_type=str(value.get("dependency_type", "finish_to_start")),
+        lag_days=int(value.get("lag_days", 0)),
+    )
+
+
+def _schedule_phase_from_dict(value: dict[str, object]) -> SchedulePhase:
+    return SchedulePhase(
+        phase_id=str(value["phase_id"]),
+        name=str(value["name"]),
+        sequence=int(value["sequence"]),
+        duration_days=int(value["duration_days"]),
+        planned_start=str(value["planned_start"]),
+        planned_end=str(value["planned_end"]),
+        status=str(value["status"]),
+        crew_assignment_ids=tuple(
+            str(item) for item in value.get("crew_assignment_ids", ())
+        ),
+        delivery_ids=tuple(str(item) for item in value.get("delivery_ids", ())),
+        blocked_reasons=tuple(str(item) for item in value.get("blocked_reasons", ())),
+    )
+
+
+def _schedule_conflict_from_dict(value: dict[str, object]) -> ScheduleConflict:
+    return ScheduleConflict(
+        conflict_id=str(value["conflict_id"]),
+        conflict_type=str(value["conflict_type"]),
+        severity=str(value["severity"]),
+        phase_id=str(value["phase_id"]),
+        reference_id=str(value["reference_id"]),
+        description=str(value["description"]),
+    )
+
+
+def _delay_impact_from_dict(value: dict[str, object]) -> DelayImpact:
+    return DelayImpact(
+        delay_id=str(value["delay_id"]),
+        schedule_id=str(value["schedule_id"]),
+        source_type=str(value["source_type"]),
+        source_id=str(value["source_id"]),
+        phase_id=str(value["phase_id"]),
+        delay_days=int(value["delay_days"]),
+        original_completion_date=str(value["original_completion_date"]),
+        projected_completion_date=str(value["projected_completion_date"]),
+        summary=str(value["summary"]),
+    )
+
+
+def _schedule_from_dict(value: dict[str, object]) -> Schedule:
+    return Schedule(
+        schedule_id=str(value["schedule_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        start_date=str(value["start_date"]),
+        original_completion_date=str(value["original_completion_date"]),
+        projected_completion_date=str(value["projected_completion_date"]),
+        status=str(value["status"]),
+        revision=int(value["revision"]),
+        phases=tuple(
+            _schedule_phase_from_dict(dict(item)) for item in value.get("phases", ())
+        ),
+        dependencies=tuple(
+            _phase_dependency_from_dict(dict(item))
+            for item in value.get("dependencies", ())
+        ),
+        conflicts=tuple(
+            _schedule_conflict_from_dict(dict(item))
+            for item in value.get("conflicts", ())
+        ),
+        delay_impacts=tuple(
+            _delay_impact_from_dict(dict(item))
+            for item in value.get("delay_impacts", ())
+        ),
+        schedule_hash=str(value["schedule_hash"]),
     )

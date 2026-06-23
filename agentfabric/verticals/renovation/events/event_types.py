@@ -14,6 +14,16 @@ CHANGE_ORDER_CREATED = "renovation.change_order_created"
 CHANGE_ORDER_APPROVED = "renovation.change_order_approved"
 CHANGE_ORDER_REJECTED = "renovation.change_order_rejected"
 CHANGE_ORDER_EXPORTED = "renovation.change_order_exported"
+SCHEDULE_CREATED = "renovation.schedule_created"
+SCHEDULE_UPDATED = "renovation.schedule_updated"
+CREW_CREATED = "renovation.crew_created"
+CREW_ASSIGNED = "renovation.crew_assigned"
+CREW_UNASSIGNED = "renovation.crew_unassigned"
+CREW_AVAILABILITY_UPDATED = "renovation.crew_availability_updated"
+MATERIAL_DELIVERY_CREATED = "renovation.material_delivery_created"
+MATERIAL_DELIVERY_UPDATED = "renovation.material_delivery_updated"
+DELAY_DETECTED = "renovation.delay_detected"
+SCHEDULE_RECALCULATED = "renovation.schedule_recalculated"
 
 EVENT_TYPES = (
     ESTIMATE_CREATED,
@@ -30,4 +40,14 @@ EVENT_TYPES = (
     CHANGE_ORDER_APPROVED,
     CHANGE_ORDER_REJECTED,
     CHANGE_ORDER_EXPORTED,
+    SCHEDULE_CREATED,
+    SCHEDULE_UPDATED,
+    CREW_CREATED,
+    CREW_ASSIGNED,
+    CREW_UNASSIGNED,
+    CREW_AVAILABILITY_UPDATED,
+    MATERIAL_DELIVERY_CREATED,
+    MATERIAL_DELIVERY_UPDATED,
+    DELAY_DETECTED,
+    SCHEDULE_RECALCULATED,
 )

@@ -43,4 +43,45 @@ ROUTES = {
         "/renovation/change-orders/{change_order_id}/export",
         "renovation.change_orders.write",
     ),
+    "schedule_create": (
+        "POST",
+        "/renovation/schedules",
+        "renovation.scheduling.write",
+    ),
+    "schedule_get": (
+        "GET",
+        "/renovation/schedules/{schedule_id}",
+        "renovation.scheduling.read",
+    ),
+    "schedule_recalculate": (
+        "POST",
+        "/renovation/schedules/{schedule_id}/recalculate",
+        "renovation.scheduling.write",
+    ),
+    "crew_create": ("POST", "/renovation/crews", "renovation.crews.write"),
+    "crew_get": (
+        "GET",
+        "/renovation/crews/{crew_id}",
+        "renovation.crews.read",
+    ),
+    "crew_availability": (
+        "POST",
+        "/renovation/crews/{crew_id}/availability",
+        "renovation.crews.write",
+    ),
+    "crew_assignment": (
+        "POST",
+        "/renovation/crew-assignments",
+        "renovation.crews.write",
+    ),
+    "material_delivery": (
+        "POST",
+        "/renovation/material-deliveries",
+        "renovation.deliveries.write",
+    ),
+    "schedule_summary": (
+        "GET",
+        "/renovation/jobs/{job_id}/schedule-summary",
+        "renovation.scheduling.read",
+    ),
 }

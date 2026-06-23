@@ -7,8 +7,10 @@ from agentfabric.errors import AuthorizationError
 
 from tests.renovation_helpers import (
     CHANGE_ORDER_PAYLOAD,
+    CREW_PAYLOAD,
     ESTIMATE_PAYLOAD,
     PROPOSAL_PAYLOAD,
+    SCHEDULE_PAYLOAD,
     job_fixture,
     service_fixture,
 )
@@ -41,6 +43,8 @@ class RenovationTenantIsolationTests(unittest.TestCase):
         self.assertTrue(package["replay_support"])
         self.assertIn("job_documentation", package["capabilities"])
         self.assertIn("change_order_management", package["capabilities"])
+        self.assertIn("project_scheduling", package["capabilities"])
+        self.assertIn("crew_coordination", package["capabilities"])
 
     def test_cross_tenant_job_history_and_change_order_are_denied(self) -> None:
         _, _, service, context, _, _, job = job_fixture()
@@ -57,3 +61,25 @@ class RenovationTenantIsolationTests(unittest.TestCase):
             service.get_change_order(other, order.change_order_id)
         with self.assertRaises(AuthorizationError):
             service.export_change_order(other, order.change_order_id)
+
+    def test_cross_tenant_schedules_and_crews_are_denied(self) -> None:
+        _, _, service, context, _, _, job = job_fixture()
+        schedule = service.create_schedule(
+            context,
+            {**SCHEDULE_PAYLOAD, "job_id": job.job_id},
+        )
+        crew = service.create_crew(context, CREW_PAYLOAD)
+        other = TenantContext("tenant-b", "org-b", "owner-b", ())
+        with self.assertRaises(AuthorizationError):
+            service.get_schedule(other, schedule.schedule_id)
+        with self.assertRaises(AuthorizationError):
+            service.get_crew(other, crew.crew_id)
+        with self.assertRaises(AuthorizationError):
+            service.create_crew_assignment(
+                other,
+                {
+                    "crew_id": crew.crew_id,
+                    "schedule_id": schedule.schedule_id,
+                    "phase_id": schedule.phases[0].phase_id,
+                },
+            )

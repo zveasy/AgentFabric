@@ -132,4 +132,4 @@ Audit bundles include all R2 artifacts, template IDs, deterministic hashes, dail
 
 ## Marketplace
 
-The package is now **RenovationOS Operations Foundation**, version `2.0.0`, with estimate, proposal, job documentation, change-order management, and project-history capabilities.
+The package became **RenovationOS Operations Foundation** in version `2.0.0`, with estimate, proposal, job documentation, change-order management, and project-history capabilities. Version `3.0.0` adds scheduling, crew coordination, delivery tracking, and delay analysis.

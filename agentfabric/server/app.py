@@ -2682,6 +2682,128 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
+    @app.post("/renovation/schedules", tags=["renovation-os"])
+    def renovation_schedule_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.scheduling.write"])
+        try:
+            schedule = renovation.create_schedule(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_schedules",
+                metadata={"schedule_id": schedule.schedule_id},
+            )
+            return schedule.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/schedules/{schedule_id}", tags=["renovation-os"])
+    def renovation_schedule_get(schedule_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.scheduling.read"])
+        try:
+            return renovation.get_schedule(ctx, schedule_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post(
+        "/renovation/schedules/{schedule_id}/recalculate",
+        tags=["renovation-os"],
+    )
+    def renovation_schedule_recalculate(schedule_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.scheduling.write"])
+        try:
+            return renovation.recalculate_schedule(ctx, schedule_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/crews", tags=["renovation-os"])
+    def renovation_crew_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crews.write"])
+        try:
+            return renovation.create_crew(ctx, payload).as_dict()
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/crews/{crew_id}", tags=["renovation-os"])
+    def renovation_crew_get(crew_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crews.read"])
+        try:
+            return renovation.get_crew(ctx, crew_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post(
+        "/renovation/crews/{crew_id}/availability",
+        tags=["renovation-os"],
+    )
+    def renovation_crew_availability(crew_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crews.write"])
+        try:
+            return renovation.update_crew_availability(ctx, crew_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/crew-assignments", tags=["renovation-os"])
+    def renovation_crew_assignment(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crews.write"])
+        try:
+            return renovation.create_crew_assignment(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/material-deliveries", tags=["renovation-os"])
+    def renovation_material_delivery(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.deliveries.write"])
+        try:
+            return renovation.create_material_delivery(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get(
+        "/renovation/jobs/{job_id}/schedule-summary",
+        tags=["renovation-os"],
+    )
+    def renovation_schedule_summary(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.scheduling.read"])
+        try:
+            return renovation.schedule_summary(ctx, job_id)
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):
         ctx = _tenant_context(request)
