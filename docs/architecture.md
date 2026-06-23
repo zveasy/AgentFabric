@@ -84,3 +84,7 @@ The software foundry now has a distinct execution boundary. `repository_material
 # Generation R1: RenovationOS Foundation
 
 `verticals.renovation` is the first vertical product package. It uses canonical serializable models, local versioned cost assumptions, versioned JSON templates, tenant-scoped persistence, and hash-chained events to create estimates and proposals without network or AI-provider dependencies. Persisted inputs support exact replay and audit export.
+
+# Generation R2: RenovationOS Operations
+
+The renovation vertical now carries accepted proposals into job execution. `jobs` owns phased job state, `documentation` owns deterministic daily logs, notes, photo metadata, issues, and summaries, and `change_orders` reuses estimate assumptions for price adjustments and approval-ready documents. The facade enforces tenant ownership and reconstructs complete project histories for replay and audit.

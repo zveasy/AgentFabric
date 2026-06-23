@@ -9,7 +9,14 @@ from fastapi.testclient import TestClient
 from agentfabric.server.app import create_app
 from agentfabric.server.config import Settings
 
-from tests.renovation_helpers import ESTIMATE_PAYLOAD, PROPOSAL_PAYLOAD
+from tests.renovation_helpers import (
+    CHANGE_ORDER_PAYLOAD,
+    DAILY_LOG_PAYLOAD,
+    ESTIMATE_PAYLOAD,
+    FIELD_NOTE_PAYLOAD,
+    JOB_PAYLOAD,
+    PROPOSAL_PAYLOAD,
+)
 
 
 class RenovationApiTests(unittest.TestCase):
@@ -112,3 +119,80 @@ class RenovationApiTests(unittest.TestCase):
             ).status_code,
             403,
         )
+
+    def test_job_documentation_change_order_and_approval_apis(self) -> None:
+        estimate_id = self.client.post(
+            "/renovation/estimate",
+            json=ESTIMATE_PAYLOAD,
+            headers=self.headers,
+        ).json()["estimate_id"]
+        proposal_id = self.client.post(
+            "/renovation/proposal",
+            json={**PROPOSAL_PAYLOAD, "estimate_id": estimate_id},
+            headers=self.headers,
+        ).json()["proposal_id"]
+        job = self.client.post(
+            "/renovation/jobs",
+            json={**JOB_PAYLOAD, "proposal_id": proposal_id},
+            headers=self.headers,
+        )
+        self.assertEqual(job.status_code, 200)
+        job_id = job.json()["job_id"]
+        log = self.client.post(
+            f"/renovation/jobs/{job_id}/daily-log",
+            json=DAILY_LOG_PAYLOAD,
+            headers=self.headers,
+        )
+        self.assertEqual(log.status_code, 200)
+        self.assertEqual(log.json()["daily_summary"]["work_date"], "2026-07-08")
+        self.assertEqual(
+            self.client.post(
+                f"/renovation/jobs/{job_id}/field-note",
+                json=FIELD_NOTE_PAYLOAD,
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        order = self.client.post(
+            "/renovation/change-orders",
+            json={**CHANGE_ORDER_PAYLOAD, "job_id": job_id},
+            headers=self.headers,
+        )
+        self.assertEqual(order.status_code, 200)
+        change_order_id = order.json()["change_order_id"]
+        viewer = self._principal("viewer-r2", "tenant-a", "viewer")
+        self.assertEqual(
+            self.client.post(
+                f"/renovation/change-orders/{change_order_id}/approve",
+                json={"decision_date": "2026-07-09"},
+                headers=viewer,
+            ).status_code,
+            403,
+        )
+        approved = self.client.post(
+            f"/renovation/change-orders/{change_order_id}/approve",
+            json={"decision_date": "2026-07-09", "decided_by": "Customer"},
+            headers=self.headers,
+        )
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(approved.json()["status"], "approved")
+        self.assertEqual(
+            self.client.get(
+                f"/renovation/change-orders/{change_order_id}",
+                headers=viewer,
+            ).status_code,
+            200,
+        )
+        exported = self.client.post(
+            f"/renovation/change-orders/{change_order_id}/export",
+            json={"format": "text"},
+            headers=self.headers,
+        )
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("Change Order", exported.json()["content"])
+        history = self.client.get(
+            f"/renovation/jobs/{job_id}",
+            headers=self.headers,
+        )
+        self.assertEqual(history.status_code, 200)
+        self.assertTrue(history.json()["history"]["change_orders"])

@@ -7,8 +7,37 @@ from agentfabric.errors import AuthorizationError, NotFoundError
 from agentfabric.events import EventStore
 from agentfabric.persistence import PersistenceStore
 
+from .change_orders import (
+    ChangeOrder,
+    ChangeOrderApproval,
+    ChangeOrderLine,
+    ChangeOrderService,
+)
+from .documentation import (
+    DailyLog,
+    DocumentationService,
+    FieldNote,
+    IssueRecord,
+    PhotoRecord,
+)
 from .estimate import EstimateService
-from .events import ESTIMATE_CREATED, ESTIMATE_UPDATED, PROPOSAL_EXPORTED, PROPOSAL_GENERATED
+from .events import (
+    CHANGE_ORDER_APPROVED,
+    CHANGE_ORDER_CREATED,
+    CHANGE_ORDER_EXPORTED,
+    CHANGE_ORDER_REJECTED,
+    DAILY_LOG_CREATED,
+    ESTIMATE_CREATED,
+    ESTIMATE_UPDATED,
+    FIELD_NOTE_ADDED,
+    ISSUE_RECORD_ADDED,
+    JOB_CREATED,
+    JOB_UPDATED,
+    PHOTO_RECORD_ADDED,
+    PROPOSAL_EXPORTED,
+    PROPOSAL_GENERATED,
+)
+from .jobs import Job, JobPhase, JobService
 from .marketplace import RENOVATION_FOUNDATION_PACKAGE
 from .models import (
     Customer,
@@ -30,6 +59,9 @@ class RenovationFoundationService:
         self.event_store = event_store
         self.estimates = EstimateService()
         self.proposals = ProposalService()
+        self.jobs = JobService()
+        self.documentation = DocumentationService()
+        self.change_orders = ChangeOrderService()
         self.persistence.put(
             "renovation_marketplace_packages",
             str(RENOVATION_FOUNDATION_PACKAGE["package_id"]),
@@ -150,6 +182,548 @@ class RenovationFoundationService:
     def marketplace_package(self) -> dict[str, object]:
         return dict(RENOVATION_FOUNDATION_PACKAGE)
 
+    def create_job(self, ctx: TenantContext, payload: dict[str, object]) -> Job:
+        proposal = self.get_proposal(ctx, str(payload["proposal_id"]))
+        job = self.jobs.create(ctx.tenant_id, proposal, payload)
+        record = self._record(ctx, payload, job.as_dict())
+        self.persistence.put("renovation_jobs", job.job_id, record)
+        self.event_store.append(
+            JOB_CREATED,
+            job.job_id,
+            self._event_payload(
+                ctx,
+                job_id=job.job_id,
+                proposal_id=job.proposal_id,
+                artifact_hash=_artifact_hash(job.export_json()),
+            ),
+        )
+        return job
+
+    def get_job(self, ctx: TenantContext, job_id: str) -> Job:
+        value = self._tenant_record(ctx, "renovation_jobs", job_id, "job")
+        return _job_from_dict(dict(value["artifact"]))
+
+    def update_job(self, ctx: TenantContext, job_id: str, payload: dict[str, object]) -> Job:
+        current = self.get_job(ctx, job_id)
+        updated = self.jobs.update(current, payload)
+        existing = self._tenant_record(ctx, "renovation_jobs", job_id, "job")
+        existing["artifact"] = updated.as_dict()
+        existing["last_update"] = payload
+        self.persistence.put("renovation_jobs", job_id, existing)
+        self.event_store.append(
+            JOB_UPDATED,
+            job_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                status=updated.status,
+                current_phase=updated.current_phase,
+                artifact_hash=_artifact_hash(updated.export_json()),
+            ),
+        )
+        return updated
+
+    def replay_job(self, ctx: TenantContext, job_id: str) -> Job:
+        value = self._tenant_record(ctx, "renovation_jobs", job_id, "job")
+        payload = dict(value["input"])
+        proposal = self.get_proposal(ctx, str(payload["proposal_id"]))
+        replayed = self.jobs.create(ctx.tenant_id, proposal, payload)
+        if value.get("last_update"):
+            replayed = self.jobs.update(replayed, dict(value["last_update"]))
+        original = _job_from_dict(dict(value["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation job replay diverged")
+        return replayed
+
+    def add_daily_log(self, ctx: TenantContext, job_id: str, payload: dict[str, object]) -> DailyLog:
+        self.get_job(ctx, job_id)
+        photos = tuple(
+            self._persist_photo(ctx, job_id, dict(item))
+            for item in payload.get("photos", ())
+        )
+        issues = tuple(
+            self._persist_issue(ctx, job_id, dict(item))
+            for item in payload.get("issues", ())
+        )
+        log = self.documentation.daily_log(ctx.tenant_id, job_id, payload, photos, issues)
+        self.persistence.put(
+            "renovation_daily_logs",
+            log.daily_log_id,
+            self._record(ctx, payload, log.as_dict()),
+        )
+        self.event_store.append(
+            DAILY_LOG_CREATED,
+            log.daily_log_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                daily_log_id=log.daily_log_id,
+                work_date=log.work_date,
+                artifact_hash=_artifact_hash(log.export_json()),
+            ),
+        )
+        self._emit_job_documentation_update(ctx, job_id, "daily_log", log.daily_log_id)
+        return log
+
+    def replay_daily_log(self, ctx: TenantContext, daily_log_id: str) -> DailyLog:
+        value = self._tenant_record(
+            ctx,
+            "renovation_daily_logs",
+            daily_log_id,
+            "daily log",
+        )
+        original = _daily_log_from_dict(dict(value["artifact"]))
+        photos = tuple(
+            _photo_from_dict(
+                dict(
+                    self._tenant_record(
+                        ctx,
+                        "renovation_photo_records",
+                        photo_id,
+                        "photo record",
+                    )["artifact"]
+                )
+            )
+            for photo_id in original.photo_record_ids
+        )
+        issues = tuple(
+            _issue_from_dict(
+                dict(
+                    self._tenant_record(
+                        ctx,
+                        "renovation_issue_records",
+                        issue_id,
+                        "issue record",
+                    )["artifact"]
+                )
+            )
+            for issue_id in original.issue_record_ids
+        )
+        replayed = self.documentation.daily_log(
+            ctx.tenant_id,
+            original.job_id,
+            dict(value["input"]),
+            photos,
+            issues,
+        )
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation daily log replay diverged")
+        return replayed
+
+    def add_field_note(self, ctx: TenantContext, job_id: str, payload: dict[str, object]) -> FieldNote:
+        self.get_job(ctx, job_id)
+        photos = tuple(
+            self._persist_photo(ctx, job_id, dict(item))
+            for item in payload.get("photos", ())
+        )
+        note = self.documentation.field_note(ctx.tenant_id, job_id, payload, photos)
+        self.persistence.put(
+            "renovation_field_notes",
+            note.field_note_id,
+            self._record(ctx, payload, note.as_dict()),
+        )
+        self.event_store.append(
+            FIELD_NOTE_ADDED,
+            note.field_note_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                field_note_id=note.field_note_id,
+                note_date=note.note_date,
+                artifact_hash=_artifact_hash(note.export_json()),
+            ),
+        )
+        self._emit_job_documentation_update(ctx, job_id, "field_note", note.field_note_id)
+        return note
+
+    def replay_field_note(self, ctx: TenantContext, field_note_id: str) -> FieldNote:
+        value = self._tenant_record(
+            ctx,
+            "renovation_field_notes",
+            field_note_id,
+            "field note",
+        )
+        original = _field_note_from_dict(dict(value["artifact"]))
+        photos = tuple(
+            _photo_from_dict(
+                dict(
+                    self._tenant_record(
+                        ctx,
+                        "renovation_photo_records",
+                        photo_id,
+                        "photo record",
+                    )["artifact"]
+                )
+            )
+            for photo_id in original.photo_record_ids
+        )
+        replayed = self.documentation.field_note(
+            ctx.tenant_id,
+            original.job_id,
+            dict(value["input"]),
+            photos,
+        )
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation field note replay diverged")
+        return replayed
+
+    def project_history(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
+        job = self.get_job(ctx, job_id)
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        collections = {
+            "daily_logs": "renovation_daily_logs",
+            "field_notes": "renovation_field_notes",
+            "photos": "renovation_photo_records",
+            "issues": "renovation_issue_records",
+            "change_orders": "renovation_change_orders",
+            "approvals": "renovation_change_order_approvals",
+            "change_order_exports": "renovation_change_order_exports",
+        }
+        history: dict[str, object] = {
+            "job": job.as_dict(),
+            "proposal": proposal.as_dict(),
+            "estimate": proposal.estimate.as_dict(),
+        }
+        for label, collection in collections.items():
+            history[label] = [
+                item["artifact"] if "artifact" in item else item
+                for item in self.persistence.list_tenant(collection, ctx.tenant_id)
+                if item.get("job_id") == job_id
+                or dict(item.get("artifact", {})).get("job_id") == job_id
+            ]
+        history["events"] = sorted(
+            [
+                {
+                    "event_type": event.event_type,
+                    "aggregate_id": event.aggregate_id,
+                    "payload": event.payload,
+                }
+            for event in self.event_store.replay()
+            if event.payload.get("tenant_id") == ctx.tenant_id
+            and (event.payload.get("job_id") == job_id or event.aggregate_id == job_id)
+            ],
+            key=lambda item: _canonical(item),
+        )
+        history["history_hash"] = _artifact_hash(_canonical(history))
+        return history
+
+    def daily_summary(self, ctx: TenantContext, job_id: str, work_date: str) -> dict[str, object]:
+        self.get_job(ctx, job_id)
+        records = {
+            "logs": self._job_artifacts(ctx, "renovation_daily_logs", job_id, "work_date", work_date),
+            "notes": self._job_artifacts(ctx, "renovation_field_notes", job_id, "note_date", work_date),
+            "photos": self._job_artifacts(ctx, "renovation_photo_records", job_id, "captured_date", work_date),
+            "issues": self._job_artifacts(ctx, "renovation_issue_records", job_id, "reported_date", work_date),
+        }
+        summary = self.documentation.daily_summary(work_date, **records)
+        self.persistence.put(
+            "renovation_daily_summaries",
+            f"{job_id}:{work_date}",
+            {"tenant_id": ctx.tenant_id, "job_id": job_id, **summary},
+        )
+        return summary
+
+    def create_change_order(self, ctx: TenantContext, payload: dict[str, object]) -> ChangeOrder:
+        job = self.get_job(ctx, str(payload["job_id"]))
+        if str(payload.get("source_type", "scope_change")) == "field_note":
+            note = self._tenant_record(
+                ctx,
+                "renovation_field_notes",
+                str(payload["source_reference"]),
+                "field note",
+            )
+            if dict(note["artifact"]).get("job_id") != job.job_id:
+                raise AuthorizationError("field note belongs to a different renovation job")
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        estimate_record = self._tenant_record(
+            ctx,
+            "renovation_estimates",
+            proposal.estimate.estimate_id,
+            "estimate",
+        )
+        order = self.change_orders.create(
+            ctx.tenant_id,
+            job.job_id,
+            proposal.proposal_id,
+            proposal.estimate,
+            dict(estimate_record["input"]),
+            payload,
+        )
+        self.persistence.put(
+            "renovation_change_orders",
+            order.change_order_id,
+            {
+                **self._record(ctx, payload, order.as_dict()),
+                "job_id": job.job_id,
+            },
+        )
+        self.event_store.append(
+            CHANGE_ORDER_CREATED,
+            order.change_order_id,
+            self._event_payload(
+                ctx,
+                job_id=job.job_id,
+                change_order_id=order.change_order_id,
+                status=order.status,
+                template_id=order.template_id,
+                artifact_hash=_artifact_hash(order.export_json()),
+            ),
+        )
+        return order
+
+    def get_change_order(self, ctx: TenantContext, change_order_id: str) -> ChangeOrder:
+        value = self._tenant_record(
+            ctx,
+            "renovation_change_orders",
+            change_order_id,
+            "change order",
+        )
+        return _change_order_from_dict(dict(value["artifact"]))
+
+    def decide_change_order(
+        self,
+        ctx: TenantContext,
+        change_order_id: str,
+        decision: str,
+        payload: dict[str, object],
+    ) -> ChangeOrder:
+        order = self.get_change_order(ctx, change_order_id)
+        updated = self.change_orders.decide(
+            order,
+            decision,
+            str(payload["decision_date"]),
+            str(payload.get("decided_by", ctx.principal_id)),
+            str(payload.get("reason", "")),
+        )
+        record = self._tenant_record(
+            ctx,
+            "renovation_change_orders",
+            change_order_id,
+            "change order",
+        )
+        record["artifact"] = updated.as_dict()
+        self.persistence.put("renovation_change_orders", change_order_id, record)
+        approval = updated.approval_history[-1]
+        self.persistence.put(
+            "renovation_change_order_approvals",
+            approval.approval_id,
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "job_id": updated.job_id,
+                "artifact": approval.as_dict(),
+            },
+        )
+        event_type = CHANGE_ORDER_APPROVED if decision == "approved" else CHANGE_ORDER_REJECTED
+        self.event_store.append(
+            event_type,
+            change_order_id,
+            self._event_payload(
+                ctx,
+                job_id=updated.job_id,
+                change_order_id=change_order_id,
+                approval_id=approval.approval_id,
+                status=updated.status,
+                artifact_hash=_artifact_hash(updated.export_json()),
+            ),
+        )
+        return updated
+
+    def replay_change_order(self, ctx: TenantContext, change_order_id: str) -> ChangeOrder:
+        value = self._tenant_record(
+            ctx,
+            "renovation_change_orders",
+            change_order_id,
+            "change order",
+        )
+        payload = dict(value["input"])
+        job = self.get_job(ctx, str(payload["job_id"]))
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        estimate_record = self._tenant_record(
+            ctx,
+            "renovation_estimates",
+            proposal.estimate.estimate_id,
+            "estimate",
+        )
+        replayed = self.change_orders.create(
+            ctx.tenant_id,
+            job.job_id,
+            proposal.proposal_id,
+            proposal.estimate,
+            dict(estimate_record["input"]),
+            payload,
+        )
+        approvals = [
+            _change_order_approval_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_change_order_approvals",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("change_order_id") == change_order_id
+        ]
+        for approval in sorted(approvals, key=lambda item: item.approval_id):
+            replayed = self.change_orders.decide(
+                replayed,
+                approval.decision,
+                approval.decision_date,
+                approval.decided_by,
+                approval.reason,
+            )
+        original = _change_order_from_dict(dict(value["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation change order replay diverged")
+        return replayed
+
+    def export_change_order(
+        self,
+        ctx: TenantContext,
+        change_order_id: str,
+        export_format: str = "json",
+    ) -> dict[str, object]:
+        order = self.get_change_order(ctx, change_order_id)
+        if export_format == "json":
+            content = order.export_json()
+        elif export_format == "text":
+            content = order.rendered_text
+        else:
+            raise ValueError("change order export format must be json or text")
+        export = {
+            "tenant_id": ctx.tenant_id,
+            "job_id": order.job_id,
+            "change_order_id": change_order_id,
+            "format": export_format,
+            "content": content,
+            "artifact_hash": _artifact_hash(content),
+            "template_id": order.template_id,
+            "template_version": order.template_version,
+        }
+        self.persistence.put(
+            "renovation_change_order_exports",
+            f"{change_order_id}:{export_format}",
+            export,
+        )
+        self.event_store.append(
+            CHANGE_ORDER_EXPORTED,
+            change_order_id,
+            self._event_payload(
+                ctx,
+                job_id=order.job_id,
+                change_order_id=change_order_id,
+                format=export_format,
+                artifact_hash=export["artifact_hash"],
+            ),
+        )
+        return export
+
+    def _persist_photo(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        payload: dict[str, object],
+    ) -> PhotoRecord:
+        photo = self.documentation.photo(ctx.tenant_id, job_id, payload)
+        self.persistence.put(
+            "renovation_photo_records",
+            photo.photo_record_id,
+            {
+                **self._record(ctx, payload, photo.as_dict()),
+                "job_id": job_id,
+            },
+        )
+        self.event_store.append(
+            PHOTO_RECORD_ADDED,
+            photo.photo_record_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                photo_record_id=photo.photo_record_id,
+                metadata_hash=_artifact_hash(photo.export_json()),
+            ),
+        )
+        return photo
+
+    def _persist_issue(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        payload: dict[str, object],
+    ) -> IssueRecord:
+        issue = self.documentation.issue(ctx.tenant_id, job_id, payload)
+        self.persistence.put(
+            "renovation_issue_records",
+            issue.issue_record_id,
+            {
+                **self._record(ctx, payload, issue.as_dict()),
+                "job_id": job_id,
+            },
+        )
+        self.event_store.append(
+            ISSUE_RECORD_ADDED,
+            issue.issue_record_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                issue_record_id=issue.issue_record_id,
+                artifact_hash=_artifact_hash(issue.export_json()),
+            ),
+        )
+        return issue
+
+    def _emit_job_documentation_update(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        record_type: str,
+        record_id: str,
+    ) -> None:
+        self.event_store.append(
+            JOB_UPDATED,
+            job_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                update_type=record_type,
+                record_id=record_id,
+            ),
+        )
+
+    def _job_artifacts(
+        self,
+        ctx: TenantContext,
+        collection: str,
+        job_id: str,
+        date_field: str,
+        date_value: str,
+    ) -> list[dict[str, object]]:
+        return [
+            dict(item["artifact"])
+            for item in self.persistence.list_tenant(collection, ctx.tenant_id)
+            if dict(item.get("artifact", {})).get("job_id") == job_id
+            and dict(item.get("artifact", {})).get(date_field) == date_value
+        ]
+
+    def _record(
+        self,
+        ctx: TenantContext,
+        input_value: dict[str, object],
+        artifact: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "tenant_id": ctx.tenant_id,
+            "organization_id": ctx.organization_id,
+            "created_by": ctx.principal_id,
+            "input": input_value,
+            "artifact": artifact,
+        }
+
+    def _event_payload(self, ctx: TenantContext, **values: object) -> dict[str, object]:
+        return {
+            "tenant_id": ctx.tenant_id,
+            "organization_id": ctx.organization_id,
+            **values,
+        }
+
     def _tenant_record(
         self,
         ctx: TenantContext,
@@ -170,6 +744,12 @@ def _artifact_hash(value: str) -> str:
     from hashlib import sha256
 
     return sha256(value.encode()).hexdigest()
+
+
+def _canonical(value: object) -> str:
+    import json
+
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _estimate_from_dict(value: dict[str, object]) -> Estimate:
@@ -210,5 +790,120 @@ def _proposal_from_dict(value: dict[str, object]) -> Proposal:
         timeline=tuple(Timeline(**item) for item in value["timeline"]),
         warranty=str(value["warranty"]),
         terms_and_conditions=tuple(str(item) for item in value["terms_and_conditions"]),
+        rendered_text=str(value["rendered_text"]),
+    )
+
+
+def _job_from_dict(value: dict[str, object]) -> Job:
+    return Job(
+        job_id=str(value["job_id"]),
+        tenant_id=str(value["tenant_id"]),
+        proposal_id=str(value["proposal_id"]),
+        project_id=str(value["project_id"]),
+        title=str(value["title"]),
+        status=str(value["status"]),
+        accepted_date=str(value["accepted_date"]),
+        acceptance_reference=str(value["acceptance_reference"]),
+        phases=tuple(JobPhase(**item) for item in value["phases"]),
+        current_phase=str(value["current_phase"]),
+        template_id=str(value["template_id"]),
+    )
+
+
+def _photo_from_dict(value: dict[str, object]) -> PhotoRecord:
+    return PhotoRecord(
+        photo_record_id=str(value["photo_record_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        captured_date=str(value["captured_date"]),
+        file_name=str(value["file_name"]),
+        storage_reference=str(value["storage_reference"]),
+        sha256=str(value["sha256"]),
+        caption=str(value.get("caption", "")),
+        phase_id=str(value.get("phase_id", "")),
+    )
+
+
+def _issue_from_dict(value: dict[str, object]) -> IssueRecord:
+    return IssueRecord(
+        issue_record_id=str(value["issue_record_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        reported_date=str(value["reported_date"]),
+        title=str(value["title"]),
+        description=str(value["description"]),
+        severity=str(value["severity"]),
+        status=str(value["status"]),
+        phase_id=str(value.get("phase_id", "")),
+    )
+
+
+def _daily_log_from_dict(value: dict[str, object]) -> DailyLog:
+    return DailyLog(
+        daily_log_id=str(value["daily_log_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        work_date=str(value["work_date"]),
+        summary=str(value["summary"]),
+        weather=str(value["weather"]),
+        crew_hours=float(value["crew_hours"]),
+        completed_work=tuple(str(item) for item in value["completed_work"]),
+        next_steps=tuple(str(item) for item in value["next_steps"]),
+        photo_record_ids=tuple(str(item) for item in value["photo_record_ids"]),
+        issue_record_ids=tuple(str(item) for item in value["issue_record_ids"]),
+    )
+
+
+def _field_note_from_dict(value: dict[str, object]) -> FieldNote:
+    return FieldNote(
+        field_note_id=str(value["field_note_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        note_date=str(value["note_date"]),
+        author=str(value["author"]),
+        note=str(value["note"]),
+        source=str(value["source"]),
+        photo_record_ids=tuple(str(item) for item in value["photo_record_ids"]),
+    )
+
+
+def _change_order_approval_from_dict(value: dict[str, object]) -> ChangeOrderApproval:
+    return ChangeOrderApproval(
+        approval_id=str(value["approval_id"]),
+        change_order_id=str(value["change_order_id"]),
+        decision=str(value["decision"]),
+        decision_date=str(value["decision_date"]),
+        decided_by=str(value["decided_by"]),
+        reason=str(value.get("reason", "")),
+    )
+
+
+def _change_order_from_dict(value: dict[str, object]) -> ChangeOrder:
+    return ChangeOrder(
+        change_order_id=str(value["change_order_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        proposal_id=str(value["proposal_id"]),
+        source_type=str(value["source_type"]),
+        source_reference=str(value["source_reference"]),
+        title=str(value["title"]),
+        description=str(value["description"]),
+        status=str(value["status"]),
+        lines=tuple(ChangeOrderLine(**item) for item in value["lines"]),
+        material_total=float(value["material_total"]),
+        labor_total=float(value["labor_total"]),
+        subtotal=float(value["subtotal"]),
+        contingency_percentage=float(value["contingency_percentage"]),
+        contingency=float(value["contingency"]),
+        tax_percentage=float(value["tax_percentage"]),
+        tax=float(value["tax"]),
+        total_adjustment=float(value["total_adjustment"]),
+        schedule_delta_days=int(value["schedule_delta_days"]),
+        template_id=str(value["template_id"]),
+        template_version=str(value["template_version"]),
+        approval_history=tuple(
+            _change_order_approval_from_dict(dict(item))
+            for item in value["approval_history"]
+        ),
         rendered_text=str(value["rendered_text"]),
     )

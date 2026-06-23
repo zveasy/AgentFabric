@@ -9761,6 +9761,333 @@
         ]
       }
     },
+    "/renovation/change-orders": {
+      "post": {
+        "operationId": "renovation_change_order_create_renovation_change_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Change Order Create",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/change-orders/{change_order_id}": {
+      "get": {
+        "operationId": "renovation_change_order_get_renovation_change_orders__change_order_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_order_id",
+            "required": true,
+            "schema": {
+              "title": "Change Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Change Order Get",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/change-orders/{change_order_id}/approve": {
+      "post": {
+        "operationId": "renovation_change_order_approve_renovation_change_orders__change_order_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_order_id",
+            "required": true,
+            "schema": {
+              "title": "Change Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Change Order Approve",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/change-orders/{change_order_id}/export": {
+      "post": {
+        "operationId": "renovation_change_order_export_renovation_change_orders__change_order_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_order_id",
+            "required": true,
+            "schema": {
+              "title": "Change Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Change Order Export",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/change-orders/{change_order_id}/reject": {
+      "post": {
+        "operationId": "renovation_change_order_reject_renovation_change_orders__change_order_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_order_id",
+            "required": true,
+            "schema": {
+              "title": "Change Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Change Order Reject",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
     "/renovation/estimate": {
       "post": {
         "operationId": "renovation_estimate_create_renovation_estimate_post",
@@ -9873,6 +10200,263 @@
           }
         },
         "summary": "Renovation Estimate Get",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/jobs": {
+      "post": {
+        "operationId": "renovation_job_create_renovation_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Job Create",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/jobs/{job_id}": {
+      "get": {
+        "operationId": "renovation_job_get_renovation_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Job Get",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/jobs/{job_id}/daily-log": {
+      "post": {
+        "operationId": "renovation_daily_log_create_renovation_jobs__job_id__daily_log_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Daily Log Create",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/jobs/{job_id}/field-note": {
+      "post": {
+        "operationId": "renovation_field_note_create_renovation_jobs__job_id__field_note_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Field Note Create",
         "tags": [
           "renovation-os"
         ]

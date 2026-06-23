@@ -180,6 +180,16 @@ EVENT_TYPE_REGISTRY = {
     "renovation.estimate_updated",
     "renovation.proposal_generated",
     "renovation.proposal_exported",
+    "renovation.job_created",
+    "renovation.job_updated",
+    "renovation.daily_log_created",
+    "renovation.field_note_added",
+    "renovation.photo_record_added",
+    "renovation.issue_record_added",
+    "renovation.change_order_created",
+    "renovation.change_order_approved",
+    "renovation.change_order_rejected",
+    "renovation.change_order_exported",
     *(item.value for item in EventType),
 }
 

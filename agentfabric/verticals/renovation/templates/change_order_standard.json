@@ -1,0 +1,11 @@
+{
+  "clauses": [
+    "This change order modifies only the scope and price stated below.",
+    "All unchanged proposal terms remain in effect.",
+    "Schedule impacts are estimates based on current project conditions.",
+    "Work will proceed after recorded approval."
+  ],
+  "style": "standard",
+  "template_id": "change_order_standard",
+  "version": "1.0.0"
+}

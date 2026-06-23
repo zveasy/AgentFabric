@@ -42,6 +42,75 @@ PROPOSAL_PAYLOAD = {
     "template_id": "standard_proposal",
 }
 
+JOB_PAYLOAD = {
+    "accepted": True,
+    "accepted_date": "2026-07-01",
+    "acceptance_reference": "signed-proposal-001",
+}
+
+DAILY_LOG_PAYLOAD = {
+    "work_date": "2026-07-08",
+    "summary": "Completed flooring preparation and documented cabinet field conditions.",
+    "weather": "Clear",
+    "crew_hours": 16,
+    "completed_work": ["Floor protection", "Subfloor inspection"],
+    "next_steps": ["Install flooring", "Confirm cabinet dimensions"],
+    "photos": [
+        {
+            "captured_date": "2026-07-08",
+            "file_name": "kitchen-subfloor.jpg",
+            "storage_reference": "veil:photo:kitchen-subfloor",
+            "sha256": "a" * 64,
+            "caption": "Kitchen subfloor after preparation",
+            "phase_id": "phase-02",
+        }
+    ],
+    "issues": [
+        {
+            "reported_date": "2026-07-08",
+            "title": "Uneven subfloor",
+            "description": "Localized leveling required near island.",
+            "severity": "medium",
+            "status": "open",
+            "phase_id": "phase-02",
+        }
+    ],
+}
+
+FIELD_NOTE_PAYLOAD = {
+    "note_date": "2026-07-08",
+    "author": "Site Lead",
+    "note": "Customer requested premium flooring at the kitchen island.",
+    "source": "customer_request",
+    "photos": [
+        {
+            "captured_date": "2026-07-08",
+            "file_name": "island-flooring-area.jpg",
+            "storage_reference": "veil:photo:island-flooring",
+            "sha256": "b" * 64,
+            "caption": "Area affected by flooring request",
+            "phase_id": "phase-02",
+        }
+    ],
+}
+
+CHANGE_ORDER_PAYLOAD = {
+    "source_type": "customer_request",
+    "source_reference": "field-note-customer-flooring",
+    "title": "Premium flooring upgrade",
+    "description": "Upgrade 50 square feet to premium flooring.",
+    "lines": [
+        {
+            "description": "Premium flooring upgrade",
+            "category": "flooring",
+            "quantity": 50,
+            "unit": "sqft",
+        }
+    ],
+    "schedule_delta_days": 1,
+    "status": "sent",
+}
+
 
 def service_fixture():
     persistence = MemoryPersistenceStore()
@@ -49,3 +118,17 @@ def service_fixture():
     service = RenovationFoundationService(persistence, events)
     context = TenantContext("tenant-a", "org-a", "owner-a", ())
     return persistence, events, service, context
+
+
+def job_fixture():
+    persistence, events, service, context = service_fixture()
+    estimate = service.create_estimate(context, ESTIMATE_PAYLOAD)
+    proposal = service.create_proposal(
+        context,
+        {**PROPOSAL_PAYLOAD, "estimate_id": estimate.estimate_id},
+    )
+    job = service.create_job(
+        context,
+        {**JOB_PAYLOAD, "proposal_id": proposal.proposal_id},
+    )
+    return persistence, events, service, context, estimate, proposal, job

@@ -59,6 +59,15 @@ class AuditBundle:
     renovation_estimates: list[dict[str, object]]
     renovation_proposals: list[dict[str, object]]
     renovation_proposal_exports: list[dict[str, object]]
+    renovation_jobs: list[dict[str, object]]
+    renovation_daily_logs: list[dict[str, object]]
+    renovation_field_notes: list[dict[str, object]]
+    renovation_photo_records: list[dict[str, object]]
+    renovation_issue_records: list[dict[str, object]]
+    renovation_daily_summaries: list[dict[str, object]]
+    renovation_change_orders: list[dict[str, object]]
+    renovation_change_order_approvals: list[dict[str, object]]
+    renovation_change_order_exports: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         value = {
@@ -111,6 +120,15 @@ class AuditBundle:
             "renovation_estimates": self.renovation_estimates,
             "renovation_proposals": self.renovation_proposals,
             "renovation_proposal_exports": self.renovation_proposal_exports,
+            "renovation_jobs": self.renovation_jobs,
+            "renovation_daily_logs": self.renovation_daily_logs,
+            "renovation_field_notes": self.renovation_field_notes,
+            "renovation_photo_records": self.renovation_photo_records,
+            "renovation_issue_records": self.renovation_issue_records,
+            "renovation_daily_summaries": self.renovation_daily_summaries,
+            "renovation_change_orders": self.renovation_change_orders,
+            "renovation_change_order_approvals": self.renovation_change_order_approvals,
+            "renovation_change_order_exports": self.renovation_change_order_exports,
         }
         redacted = redact(value)
         if contains_raw_sensitive(redacted):

@@ -2529,6 +2529,159 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
+    @app.post("/renovation/jobs", tags=["renovation-os"])
+    def renovation_job_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.jobs.write"])
+        try:
+            job = renovation.create_job(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_jobs",
+                metadata={"job_id": job.job_id},
+            )
+            return job.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/jobs/{job_id}", tags=["renovation-os"])
+    def renovation_job_get(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.jobs.read"])
+        try:
+            job = renovation.get_job(ctx, job_id)
+            return {**job.as_dict(), "history": renovation.project_history(ctx, job_id)}
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/jobs/{job_id}/daily-log", tags=["renovation-os"])
+    def renovation_daily_log_create(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.documentation.write"])
+        try:
+            log = renovation.add_daily_log(ctx, job_id, payload)
+            return {
+                "daily_log": log.as_dict(),
+                "daily_summary": renovation.daily_summary(ctx, job_id, log.work_date),
+            }
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/jobs/{job_id}/field-note", tags=["renovation-os"])
+    def renovation_field_note_create(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.documentation.write"])
+        try:
+            return renovation.add_field_note(ctx, job_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/change-orders", tags=["renovation-os"])
+    def renovation_change_order_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.change_orders.write"])
+        try:
+            order = renovation.create_change_order(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_change_orders",
+                metadata={"change_order_id": order.change_order_id},
+            )
+            return order.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/change-orders/{change_order_id}", tags=["renovation-os"])
+    def renovation_change_order_get(change_order_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.change_orders.read"])
+        try:
+            return renovation.get_change_order(ctx, change_order_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post(
+        "/renovation/change-orders/{change_order_id}/approve",
+        tags=["renovation-os"],
+    )
+    def renovation_change_order_approve(change_order_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.change_orders.approve"])
+        try:
+            return renovation.decide_change_order(
+                ctx,
+                change_order_id,
+                "approved",
+                payload,
+            ).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post(
+        "/renovation/change-orders/{change_order_id}/reject",
+        tags=["renovation-os"],
+    )
+    def renovation_change_order_reject(change_order_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.change_orders.approve"])
+        try:
+            return renovation.decide_change_order(
+                ctx,
+                change_order_id,
+                "rejected",
+                payload,
+            ).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post(
+        "/renovation/change-orders/{change_order_id}/export",
+        tags=["renovation-os"],
+    )
+    def renovation_change_order_export(change_order_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.change_orders.write"])
+        try:
+            return renovation.export_change_order(
+                ctx,
+                change_order_id,
+                str(payload.get("format", "json")),
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):
         ctx = _tenant_context(request)

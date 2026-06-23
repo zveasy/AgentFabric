@@ -76,6 +76,45 @@ class AuditBundleExporter:
                 "renovation_proposal_exports",
                 tenant_id,
             ),
+            renovation_jobs=_renovation_artifacts(self.persistence, "renovation_jobs", tenant_id),
+            renovation_daily_logs=_renovation_artifacts(
+                self.persistence,
+                "renovation_daily_logs",
+                tenant_id,
+            ),
+            renovation_field_notes=_renovation_artifacts(
+                self.persistence,
+                "renovation_field_notes",
+                tenant_id,
+            ),
+            renovation_photo_records=_renovation_artifacts(
+                self.persistence,
+                "renovation_photo_records",
+                tenant_id,
+            ),
+            renovation_issue_records=_renovation_artifacts(
+                self.persistence,
+                "renovation_issue_records",
+                tenant_id,
+            ),
+            renovation_daily_summaries=self.persistence.list_tenant(
+                "renovation_daily_summaries",
+                tenant_id,
+            ),
+            renovation_change_orders=_renovation_artifacts(
+                self.persistence,
+                "renovation_change_orders",
+                tenant_id,
+            ),
+            renovation_change_order_approvals=_renovation_artifacts(
+                self.persistence,
+                "renovation_change_order_approvals",
+                tenant_id,
+            ),
+            renovation_change_order_exports=self.persistence.list_tenant(
+                "renovation_change_order_exports",
+                tenant_id,
+            ),
         )
         return bundle
 

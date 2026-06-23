@@ -133,4 +133,4 @@ Audit bundles include estimate artifacts, proposal artifacts, template identifie
 
 ## Marketplace
 
-The internal package catalog registers **RenovationOS Foundation** in the Construction and Operations categories. Metadata declares offline deterministic execution, estimate and proposal capabilities, tenant isolation, and replay support.
+The internal package catalog now registers **RenovationOS Operations Foundation** in the Construction and Operations categories. R1 estimate and proposal capabilities remain available alongside R2 job documentation and change-order management.

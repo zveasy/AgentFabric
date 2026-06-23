@@ -419,13 +419,36 @@ class RbacService:
 
     renovation_read = {"renovation.estimate.read", "renovation.proposal.read"}
     renovation_write = {"renovation.estimate.write", "renovation.proposal.write"}
-    ROLE_PERMISSIONS["admin"].update(renovation_read | renovation_write)
-    ROLE_PERMISSIONS["developer"].update(renovation_read | renovation_write)
-    ROLE_PERMISSIONS["operator"].update(renovation_read | renovation_write)
-    ROLE_PERMISSIONS["reviewer"].update(renovation_read)
-    ROLE_PERMISSIONS["auditor"].update(renovation_read)
-    ROLE_PERMISSIONS["viewer"].update(renovation_read)
-    ROLE_PERMISSIONS["service_account"].update(renovation_read | renovation_write)
+    renovation_operations_read = {
+        "renovation.jobs.read",
+        "renovation.documentation.read",
+        "renovation.change_orders.read",
+    }
+    renovation_operations_write = {
+        "renovation.jobs.write",
+        "renovation.documentation.write",
+        "renovation.change_orders.write",
+    }
+    renovation_approve = {"renovation.change_orders.approve"}
+    ROLE_PERMISSIONS["admin"].update(
+        renovation_read | renovation_write | renovation_operations_read | renovation_operations_write | renovation_approve
+    )
+    ROLE_PERMISSIONS["developer"].update(
+        renovation_read | renovation_write | renovation_operations_read | renovation_operations_write
+    )
+    ROLE_PERMISSIONS["operator"].update(
+        renovation_read
+        | renovation_write
+        | renovation_operations_read
+        | renovation_operations_write
+        | renovation_approve
+    )
+    ROLE_PERMISSIONS["reviewer"].update(renovation_read | renovation_operations_read | renovation_approve)
+    ROLE_PERMISSIONS["auditor"].update(renovation_read | renovation_operations_read)
+    ROLE_PERMISSIONS["viewer"].update(renovation_read | renovation_operations_read)
+    ROLE_PERMISSIONS["service_account"].update(
+        renovation_read | renovation_write | renovation_operations_read | renovation_operations_write
+    )
 
     ROLE_PERMISSIONS["owner"] = set().union(*ROLE_PERMISSIONS.values()) | {
         "auth.admin",
