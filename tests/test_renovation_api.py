@@ -18,6 +18,9 @@ from tests.renovation_helpers import (
     ESTIMATE_PAYLOAD,
     FIELD_NOTE_PAYLOAD,
     JOB_PAYLOAD,
+    INVOICE_PAYLOAD,
+    MATERIAL_COST_PAYLOAD,
+    PAYABLE_PAYLOAD,
     PROPOSAL_PAYLOAD,
     SCHEDULE_PAYLOAD,
 )
@@ -295,6 +298,100 @@ class RenovationApiTests(unittest.TestCase):
             self.client.post(
                 "/renovation/crews",
                 json=CREW_PAYLOAD,
+                headers=viewer,
+            ).status_code,
+            403,
+        )
+
+    def test_finance_profitability_invoice_payable_and_cashflow_apis(self) -> None:
+        estimate_id = self.client.post(
+            "/renovation/estimate",
+            json=ESTIMATE_PAYLOAD,
+            headers=self.headers,
+        ).json()["estimate_id"]
+        proposal_id = self.client.post(
+            "/renovation/proposal",
+            json={**PROPOSAL_PAYLOAD, "estimate_id": estimate_id},
+            headers=self.headers,
+        ).json()["proposal_id"]
+        job_id = self.client.post(
+            "/renovation/jobs",
+            json={**JOB_PAYLOAD, "proposal_id": proposal_id},
+            headers=self.headers,
+        ).json()["job_id"]
+        cost = self.client.post(
+            f"/renovation/jobs/{job_id}/costs",
+            json=MATERIAL_COST_PAYLOAD,
+            headers=self.headers,
+        )
+        self.assertEqual(cost.status_code, 200)
+        profitability = self.client.get(
+            f"/renovation/jobs/{job_id}/profitability",
+            headers=self.headers,
+        )
+        self.assertEqual(profitability.status_code, 200)
+        self.assertTrue(profitability.json()["financial_hash"])
+        invoice_response = self.client.post(
+            "/renovation/invoices",
+            json={**INVOICE_PAYLOAD, "job_id": job_id},
+            headers=self.headers,
+        )
+        self.assertEqual(invoice_response.status_code, 200)
+        invoice_id = invoice_response.json()["invoice_id"]
+        paid = self.client.post(
+            f"/renovation/invoices/{invoice_id}/payment",
+            json={"payment_date": "2026-07-05", "amount": 1000, "method": "ach"},
+            headers=self.headers,
+        )
+        self.assertEqual(paid.status_code, 200)
+        self.assertEqual(paid.json()["outstanding_balance"], 4000)
+        self.assertEqual(
+            self.client.get(
+                f"/renovation/invoices/{invoice_id}",
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        payable_response = self.client.post(
+            "/renovation/payables",
+            json={**PAYABLE_PAYLOAD, "job_id": job_id},
+            headers=self.headers,
+        )
+        self.assertEqual(payable_response.status_code, 200)
+        payable_id = payable_response.json()["payable_id"]
+        self.assertEqual(
+            self.client.post(
+                f"/renovation/payables/{payable_id}/payment",
+                json={"payment_date": "2026-07-06", "amount": 500},
+                headers=self.headers,
+            ).status_code,
+            200,
+        )
+        forecast = self.client.get(
+            "/renovation/cash-flow/forecast",
+            params={"as_of": "2026-07-01"},
+            headers=self.headers,
+        )
+        self.assertEqual(forecast.status_code, 200)
+        self.assertEqual(len(forecast.json()["windows"]), 5)
+        owner_summary = self.client.get(
+            "/renovation/owner-summary",
+            params={"as_of": "2026-07-01"},
+            headers=self.headers,
+        )
+        self.assertEqual(owner_summary.status_code, 200)
+        viewer = self._principal("viewer-r4", "tenant-a", "viewer")
+        self.assertEqual(
+            self.client.get(
+                f"/renovation/invoices/{invoice_id}",
+                headers=viewer,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                f"/renovation/jobs/{job_id}/costs",
+                json=MATERIAL_COST_PAYLOAD,
                 headers=viewer,
             ).status_code,
             403,

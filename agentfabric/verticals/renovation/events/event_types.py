@@ -24,6 +24,15 @@ MATERIAL_DELIVERY_CREATED = "renovation.material_delivery_created"
 MATERIAL_DELIVERY_UPDATED = "renovation.material_delivery_updated"
 DELAY_DETECTED = "renovation.delay_detected"
 SCHEDULE_RECALCULATED = "renovation.schedule_recalculated"
+JOB_COST_RECORDED = "renovation.job_cost_recorded"
+INVOICE_CREATED = "renovation.invoice_created"
+INVOICE_PAID = "renovation.invoice_paid"
+PAYABLE_CREATED = "renovation.payable_created"
+PAYABLE_PAID = "renovation.payable_paid"
+MARGIN_VARIANCE_DETECTED = "renovation.margin_variance_detected"
+COST_OVERRUN_DETECTED = "renovation.cost_overrun_detected"
+CASH_FLOW_FORECAST_GENERATED = "renovation.cash_flow_forecast_generated"
+PROFITABILITY_SCORECARD_GENERATED = "renovation.profitability_scorecard_generated"
 
 EVENT_TYPES = (
     ESTIMATE_CREATED,
@@ -50,4 +59,13 @@ EVENT_TYPES = (
     MATERIAL_DELIVERY_UPDATED,
     DELAY_DETECTED,
     SCHEDULE_RECALCULATED,
+    JOB_COST_RECORDED,
+    INVOICE_CREATED,
+    INVOICE_PAID,
+    PAYABLE_CREATED,
+    PAYABLE_PAID,
+    MARGIN_VARIANCE_DETECTED,
+    COST_OVERRUN_DETECTED,
+    CASH_FLOW_FORECAST_GENERATED,
+    PROFITABILITY_SCORECARD_GENERATED,
 )

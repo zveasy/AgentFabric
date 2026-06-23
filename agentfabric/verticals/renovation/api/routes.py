@@ -84,4 +84,49 @@ ROUTES = {
         "/renovation/jobs/{job_id}/schedule-summary",
         "renovation.scheduling.read",
     ),
+    "job_cost_create": (
+        "POST",
+        "/renovation/jobs/{job_id}/costs",
+        "renovation.finance.write",
+    ),
+    "job_profitability": (
+        "GET",
+        "/renovation/jobs/{job_id}/profitability",
+        "renovation.profitability.read",
+    ),
+    "invoice_create": (
+        "POST",
+        "/renovation/invoices",
+        "renovation.invoicing.write",
+    ),
+    "invoice_payment": (
+        "POST",
+        "/renovation/invoices/{invoice_id}/payment",
+        "renovation.invoicing.write",
+    ),
+    "invoice_get": (
+        "GET",
+        "/renovation/invoices/{invoice_id}",
+        "renovation.invoicing.read",
+    ),
+    "payable_create": (
+        "POST",
+        "/renovation/payables",
+        "renovation.invoicing.write",
+    ),
+    "payable_payment": (
+        "POST",
+        "/renovation/payables/{payable_id}/payment",
+        "renovation.invoicing.write",
+    ),
+    "cash_flow_forecast": (
+        "GET",
+        "/renovation/cash-flow/forecast",
+        "renovation.cashflow.read",
+    ),
+    "owner_summary": (
+        "GET",
+        "/renovation/owner-summary",
+        "renovation.finance.read",
+    ),
 }

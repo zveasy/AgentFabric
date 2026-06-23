@@ -153,6 +153,50 @@ class AuditBundleExporter:
                 "renovation_delay_impacts",
                 tenant_id,
             ),
+            renovation_job_costs=_renovation_artifacts(
+                self.persistence,
+                "renovation_job_costs",
+                tenant_id,
+            ),
+            renovation_invoices=_renovation_artifacts(
+                self.persistence,
+                "renovation_invoices",
+                tenant_id,
+            ),
+            renovation_payments=_renovation_artifacts(
+                self.persistence,
+                "renovation_payments",
+                tenant_id,
+            ),
+            renovation_payables=_renovation_artifacts(
+                self.persistence,
+                "renovation_payables",
+                tenant_id,
+            ),
+            renovation_profitability_scorecards=_renovation_artifacts(
+                self.persistence,
+                "renovation_profitability_scorecards",
+                tenant_id,
+            ),
+            renovation_margin_variances=_renovation_artifacts(
+                self.persistence,
+                "renovation_margin_variances",
+                tenant_id,
+            ),
+            renovation_cost_overrun_alerts=_renovation_artifacts(
+                self.persistence,
+                "renovation_cost_overrun_alerts",
+                tenant_id,
+            ),
+            renovation_cash_flow_forecasts=_renovation_artifacts(
+                self.persistence,
+                "renovation_cash_flow_forecasts",
+                tenant_id,
+            ),
+            renovation_owner_summaries=self.persistence.list_tenant(
+                "renovation_owner_summaries",
+                tenant_id,
+            ),
         )
         return bundle
 

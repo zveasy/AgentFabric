@@ -73,6 +73,7 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/verticals/renovation`: offline deterministic renovation estimates, proposal templates, replay, exports, events, and marketplace metadata.
 - `agentfabric/verticals/renovation/jobs`, `documentation`, `change_orders`: proposal-to-job execution, audit-ready field records, rate-based change orders, approvals, and project history.
 - `agentfabric/verticals/renovation/scheduling`, `crews`, `deliveries`: dependency schedules, crew coordination, material tracking, conflict detection, delay analysis, and reproducible completion forecasts.
+- `agentfabric/verticals/renovation/finance`, `profitability`, `invoicing`: actual job costs, margin variance, cost overruns, receivables, payables, cash-flow forecasts, and owner summaries.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -164,11 +165,11 @@ See [docs/build_workers.md](docs/build_workers.md) for worker governance and [do
 
 ## Vertical Solutions
 
-RenovationOS Operations Foundation is the first production vertical. It turns persisted project scope, room dimensions, quantities, and local rates into reproducible estimates and proposals, carries accepted work through job documentation and change-order approval, and coordinates dependency schedules, crews, and material deliveries.
+RenovationOS Operations Foundation is the first production vertical. It turns persisted project scope, room dimensions, quantities, and local rates into reproducible estimates and proposals, carries accepted work through job documentation and change-order approval, coordinates schedules, crews, and deliveries, and reports job profitability and cash flow.
 
 ## Marketplace
 
-The vertical catalog includes **RenovationOS Operations Foundation** under Construction and Operations. Version 3 adds project scheduling, crew coordination, delivery tracking, schedule conflict detection, and delay impact analysis to the existing estimate, proposal, documentation, and change-order capabilities.
+The vertical catalog includes **RenovationOS Operations Foundation** under Construction and Operations. Version 4 adds financial visibility, job profitability, cost-overrun detection, invoice and payable tracking, and cash-flow forecasting to the existing operational capabilities.
 
 ## API Reference
 
@@ -179,3 +180,5 @@ See [docs/renovationos_foundation.md](docs/renovationos_foundation.md) for archi
 Operations APIs add jobs, daily logs, field notes, change-order creation/read/approval/rejection/export, and complete job history. See [docs/renovationos_operations.md](docs/renovationos_operations.md).
 
 Scheduling APIs add schedules, recalculation, crews, availability, assignments, material deliveries, and customer-facing job schedule summaries. See [docs/renovationos_scheduling.md](docs/renovationos_scheduling.md).
+
+Finance APIs add job costs, profitability scorecards, invoices, payments, vendor payables, fixed-window cash-flow forecasts, and owner summaries. See [docs/renovationos_finance.md](docs/renovationos_finance.md).

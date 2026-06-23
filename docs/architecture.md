@@ -92,3 +92,7 @@ The renovation vertical now carries accepted proposals into job execution. `jobs
 # Generation R3: RenovationOS Scheduling
 
 RenovationOS execution planning adds dependency-aware schedules, crew availability and assignments, material deliveries, conflict detection, blocked-phase analysis, deterministic completion-date recalculation, replay evidence, and customer schedule summaries.
+
+# Generation R4: RenovationOS Finance
+
+RenovationOS financial intelligence adds typed actual job costs, estimated-versus-actual margin analysis, receivable and payable ledgers, bounded payment application, fixed-window cash-flow forecasts, deterministic profitability scorecards, owner summaries, and replayable financial evidence.

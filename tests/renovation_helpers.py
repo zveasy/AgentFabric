@@ -151,6 +151,49 @@ DELIVERY_PAYLOAD = {
     "supplier_reference": "supplier-order-100",
 }
 
+MATERIAL_COST_PAYLOAD = {
+    "cost_date": "2026-07-10",
+    "category": "material",
+    "description": "Cabinet package",
+    "quantity": 10,
+    "unit": "cabinet",
+    "unit_cost": 900,
+    "source_reference": "vendor-invoice-100",
+}
+
+LABOR_COST_PAYLOAD = {
+    "cost_date": "2026-07-11",
+    "category": "labor",
+    "description": "Cabinet installation",
+    "hours": 80,
+    "hourly_rate": 70,
+    "source_reference": "timecard-week-28",
+}
+
+OVERHEAD_COST_PAYLOAD = {
+    "cost_date": "2026-07-11",
+    "category": "overhead",
+    "description": "Project supervision allocation",
+    "amount": 750,
+    "allocation_method": "direct",
+}
+
+INVOICE_PAYLOAD = {
+    "invoice_date": "2026-07-01",
+    "due_date": "2026-07-15",
+    "description": "Project deposit",
+    "amount": 5000,
+    "tax": 0,
+}
+
+PAYABLE_PAYLOAD = {
+    "vendor": "Cabinet Supply Co",
+    "payable_date": "2026-07-02",
+    "due_date": "2026-07-20",
+    "description": "Cabinet materials",
+    "amount": 2500,
+}
+
 
 def service_fixture():
     persistence = MemoryPersistenceStore()

@@ -93,4 +93,4 @@ Audit bundles include schedules, phases, dependencies, schedule hashes, crew rec
 
 ## Marketplace
 
-RenovationOS Operations Foundation version `3.0.0` adds project scheduling, crew coordination, material delivery tracking, conflict detection, blocked-phase detection, and delay impact analysis.
+RenovationOS Operations Foundation version `3.0.0` added project scheduling, crew coordination, material delivery tracking, conflict detection, blocked-phase detection, and delay impact analysis. Version `4.0.0` adds the financial intelligence described in [renovationos_finance.md](renovationos_finance.md).

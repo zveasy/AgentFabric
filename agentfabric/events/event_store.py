@@ -200,6 +200,15 @@ EVENT_TYPE_REGISTRY = {
     "renovation.material_delivery_updated",
     "renovation.delay_detected",
     "renovation.schedule_recalculated",
+    "renovation.job_cost_recorded",
+    "renovation.invoice_created",
+    "renovation.invoice_paid",
+    "renovation.payable_created",
+    "renovation.payable_paid",
+    "renovation.margin_variance_detected",
+    "renovation.cost_overrun_detected",
+    "renovation.cash_flow_forecast_generated",
+    "renovation.profitability_scorecard_generated",
     *(item.value for item in EventType),
 }
 

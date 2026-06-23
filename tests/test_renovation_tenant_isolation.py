@@ -10,6 +10,8 @@ from tests.renovation_helpers import (
     CREW_PAYLOAD,
     ESTIMATE_PAYLOAD,
     PROPOSAL_PAYLOAD,
+    INVOICE_PAYLOAD,
+    MATERIAL_COST_PAYLOAD,
     SCHEDULE_PAYLOAD,
     job_fixture,
     service_fixture,
@@ -45,6 +47,8 @@ class RenovationTenantIsolationTests(unittest.TestCase):
         self.assertIn("change_order_management", package["capabilities"])
         self.assertIn("project_scheduling", package["capabilities"])
         self.assertIn("crew_coordination", package["capabilities"])
+        self.assertIn("job_profitability", package["capabilities"])
+        self.assertIn("cash_flow_forecasting", package["capabilities"])
 
     def test_cross_tenant_job_history_and_change_order_are_denied(self) -> None:
         _, _, service, context, _, _, job = job_fixture()
@@ -83,3 +87,18 @@ class RenovationTenantIsolationTests(unittest.TestCase):
                     "phase_id": schedule.phases[0].phase_id,
                 },
             )
+
+    def test_cross_tenant_finance_access_is_denied(self) -> None:
+        _, _, service, context, _, _, job = job_fixture()
+        cost = service.record_job_cost(context, job.job_id, MATERIAL_COST_PAYLOAD)
+        invoice = service.create_invoice(
+            context,
+            {**INVOICE_PAYLOAD, "job_id": job.job_id},
+        )
+        other = TenantContext("tenant-b", "org-b", "owner-b", ())
+        with self.assertRaises(AuthorizationError):
+            service.replay_job_cost(other, cost.cost_record_id)
+        with self.assertRaises(AuthorizationError):
+            service.get_invoice(other, invoice.invoice_id)
+        with self.assertRaises(AuthorizationError):
+            service.job_profitability(other, job.job_id)

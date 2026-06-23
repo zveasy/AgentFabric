@@ -439,6 +439,16 @@ class RbacService:
         "renovation.crews.write",
         "renovation.deliveries.write",
     }
+    renovation_finance_read = {
+        "renovation.finance.read",
+        "renovation.profitability.read",
+        "renovation.invoicing.read",
+        "renovation.cashflow.read",
+    }
+    renovation_finance_write = {
+        "renovation.finance.write",
+        "renovation.invoicing.write",
+    }
     renovation_approve = {"renovation.change_orders.approve"}
     ROLE_PERMISSIONS["admin"].update(
         renovation_read
@@ -447,6 +457,8 @@ class RbacService:
         | renovation_operations_write
         | renovation_scheduling_read
         | renovation_scheduling_write
+        | renovation_finance_read
+        | renovation_finance_write
         | renovation_approve
     )
     ROLE_PERMISSIONS["developer"].update(
@@ -456,6 +468,8 @@ class RbacService:
         | renovation_operations_write
         | renovation_scheduling_read
         | renovation_scheduling_write
+        | renovation_finance_read
+        | renovation_finance_write
     )
     ROLE_PERMISSIONS["operator"].update(
         renovation_read
@@ -464,19 +478,28 @@ class RbacService:
         | renovation_operations_write
         | renovation_scheduling_read
         | renovation_scheduling_write
+        | renovation_finance_read
+        | renovation_finance_write
         | renovation_approve
     )
     ROLE_PERMISSIONS["reviewer"].update(
         renovation_read
         | renovation_operations_read
         | renovation_scheduling_read
+        | renovation_finance_read
         | renovation_approve
     )
     ROLE_PERMISSIONS["auditor"].update(
-        renovation_read | renovation_operations_read | renovation_scheduling_read
+        renovation_read
+        | renovation_operations_read
+        | renovation_scheduling_read
+        | renovation_finance_read
     )
     ROLE_PERMISSIONS["viewer"].update(
-        renovation_read | renovation_operations_read | renovation_scheduling_read
+        renovation_read
+        | renovation_operations_read
+        | renovation_scheduling_read
+        | renovation_finance_read
     )
     ROLE_PERMISSIONS["service_account"].update(
         renovation_read
@@ -485,6 +508,8 @@ class RbacService:
         | renovation_operations_write
         | renovation_scheduling_read
         | renovation_scheduling_write
+        | renovation_finance_read
+        | renovation_finance_write
     )
 
     ROLE_PERMISSIONS["owner"] = set().union(*ROLE_PERMISSIONS.values()) | {

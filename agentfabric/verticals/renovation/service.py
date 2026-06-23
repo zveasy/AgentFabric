@@ -24,6 +24,7 @@ from .documentation import (
 )
 from .estimate import EstimateService
 from .events import (
+    CASH_FLOW_FORECAST_GENERATED,
     CHANGE_ORDER_APPROVED,
     CHANGE_ORDER_CREATED,
     CHANGE_ORDER_EXPORTED,
@@ -32,23 +33,40 @@ from .events import (
     CREW_AVAILABILITY_UPDATED,
     CREW_CREATED,
     CREW_UNASSIGNED,
+    COST_OVERRUN_DETECTED,
     DAILY_LOG_CREATED,
     DELAY_DETECTED,
     ESTIMATE_CREATED,
     ESTIMATE_UPDATED,
     FIELD_NOTE_ADDED,
     ISSUE_RECORD_ADDED,
+    INVOICE_CREATED,
+    INVOICE_PAID,
     JOB_CREATED,
+    JOB_COST_RECORDED,
     JOB_UPDATED,
+    MARGIN_VARIANCE_DETECTED,
     MATERIAL_DELIVERY_CREATED,
     MATERIAL_DELIVERY_UPDATED,
     PHOTO_RECORD_ADDED,
+    PAYABLE_CREATED,
+    PAYABLE_PAID,
+    PROFITABILITY_SCORECARD_GENERATED,
     PROPOSAL_EXPORTED,
     PROPOSAL_GENERATED,
     SCHEDULE_CREATED,
     SCHEDULE_RECALCULATED,
     SCHEDULE_UPDATED,
 )
+from .finance import (
+    ActualLaborCost,
+    ActualMaterialCost,
+    FinanceService,
+    JobCostRecord,
+    OverheadAllocation,
+    SubcontractorCost,
+)
+from .invoicing import Invoice, InvoiceService, PaymentRecord, VendorPayable
 from .jobs import Job, JobPhase, JobService
 from .marketplace import RENOVATION_FOUNDATION_PACKAGE
 from .models import (
@@ -63,6 +81,14 @@ from .models import (
     Timeline,
 )
 from .proposal import ProposalService
+from .profitability import (
+    CashFlowForecast,
+    CashFlowWindow,
+    CostOverrunAlert,
+    MarginVariance,
+    ProfitabilityScorecard,
+    ProfitabilityService,
+)
 from .scheduling import (
     DelayImpact,
     PhaseDependency,
@@ -85,6 +111,9 @@ class RenovationFoundationService:
         self.scheduling = SchedulingService()
         self.crews = CrewService()
         self.deliveries = DeliveryService()
+        self.finance = FinanceService()
+        self.invoicing = InvoiceService()
+        self.profitability = ProfitabilityService()
         self.persistence.put(
             "renovation_marketplace_packages",
             str(RENOVATION_FOUNDATION_PACKAGE["package_id"]),
@@ -406,6 +435,13 @@ class RenovationFoundationService:
             "material_deliveries": "renovation_material_deliveries",
             "delay_impacts": "renovation_delay_impacts",
             "schedule_summaries": "renovation_schedule_summaries",
+            "job_costs": "renovation_job_costs",
+            "invoices": "renovation_invoices",
+            "payments": "renovation_payments",
+            "payables": "renovation_payables",
+            "profitability_scorecards": "renovation_profitability_scorecards",
+            "margin_variances": "renovation_margin_variances",
+            "cost_overrun_alerts": "renovation_cost_overrun_alerts",
         }
         history: dict[str, object] = {
             "job": job.as_dict(),
@@ -1055,6 +1091,567 @@ class RenovationFoundationService:
         )
         return updated
 
+    def record_job_cost(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        payload: dict[str, object],
+    ) -> JobCostRecord:
+        self.get_job(ctx, job_id)
+        cost = self.finance.record_cost(ctx.tenant_id, job_id, payload)
+        self.persistence.put(
+            "renovation_job_costs",
+            cost.cost_record_id,
+            {
+                **self._record(ctx, payload, cost.as_dict()),
+                "job_id": job_id,
+            },
+        )
+        self.event_store.append(
+            JOB_COST_RECORDED,
+            cost.cost_record_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                cost_record_id=cost.cost_record_id,
+                category=cost.category,
+                amount=cost.amount,
+                financial_hash=_artifact_hash(cost.export_json()),
+            ),
+        )
+        return cost
+
+    def replay_job_cost(
+        self,
+        ctx: TenantContext,
+        cost_record_id: str,
+    ) -> JobCostRecord:
+        record = self._tenant_record(
+            ctx,
+            "renovation_job_costs",
+            cost_record_id,
+            "job cost",
+        )
+        original = _job_cost_from_dict(dict(record["artifact"]))
+        replayed = self.finance.record_cost(
+            ctx.tenant_id,
+            original.job_id,
+            dict(record["input"]),
+        )
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation job cost replay diverged")
+        return replayed
+
+    def job_profitability(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+    ) -> ProfitabilityScorecard:
+        job = self.get_job(ctx, job_id)
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        approved_change_orders = tuple(
+            _change_order_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_change_orders",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job_id
+            and dict(item["artifact"]).get("status") == "approved"
+        )
+        costs = tuple(
+            _job_cost_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_job_costs",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job_id
+        )
+        contracted_revenue = round(
+            proposal.estimate.total
+            + sum(item.total_adjustment for item in approved_change_orders),
+            2,
+        )
+        estimated_cost = round(
+            proposal.estimate.subtotal + proposal.estimate.contingency,
+            2,
+        )
+        scorecard = self.profitability.scorecard(
+            ctx.tenant_id,
+            job_id,
+            contracted_revenue,
+            estimated_cost,
+            costs,
+        )
+        evidence = {
+            "tenant_id": ctx.tenant_id,
+            "organization_id": ctx.organization_id,
+            "created_by": ctx.principal_id,
+            "job_id": job_id,
+            "contracted_revenue": contracted_revenue,
+            "estimated_cost": estimated_cost,
+            "costs": [item.as_dict() for item in costs],
+            "approved_change_order_ids": sorted(
+                item.change_order_id for item in approved_change_orders
+            ),
+            "artifact": scorecard.as_dict(),
+        }
+        self.persistence.put(
+            "renovation_profitability_scorecards",
+            scorecard.scorecard_id,
+            evidence,
+        )
+        if scorecard.margin_variance:
+            self.persistence.put(
+                "renovation_margin_variances",
+                scorecard.margin_variance.variance_id,
+                {
+                    "tenant_id": ctx.tenant_id,
+                    "organization_id": ctx.organization_id,
+                    "created_by": ctx.principal_id,
+                    "job_id": job_id,
+                    "artifact": scorecard.margin_variance.as_dict(),
+                },
+            )
+            self.event_store.append(
+                MARGIN_VARIANCE_DETECTED,
+                scorecard.margin_variance.variance_id,
+                self._event_payload(
+                    ctx,
+                    job_id=job_id,
+                    variance_id=scorecard.margin_variance.variance_id,
+                    variance_percentage_points=(
+                        scorecard.margin_variance.variance_percentage_points
+                    ),
+                ),
+            )
+        if scorecard.cost_overrun_alert:
+            self.persistence.put(
+                "renovation_cost_overrun_alerts",
+                scorecard.cost_overrun_alert.alert_id,
+                {
+                    "tenant_id": ctx.tenant_id,
+                    "organization_id": ctx.organization_id,
+                    "created_by": ctx.principal_id,
+                    "job_id": job_id,
+                    "artifact": scorecard.cost_overrun_alert.as_dict(),
+                },
+            )
+            self.event_store.append(
+                COST_OVERRUN_DETECTED,
+                scorecard.cost_overrun_alert.alert_id,
+                self._event_payload(
+                    ctx,
+                    job_id=job_id,
+                    alert_id=scorecard.cost_overrun_alert.alert_id,
+                    overrun_amount=scorecard.cost_overrun_alert.overrun_amount,
+                ),
+            )
+        self.event_store.append(
+            PROFITABILITY_SCORECARD_GENERATED,
+            scorecard.scorecard_id,
+            self._event_payload(
+                ctx,
+                job_id=job_id,
+                scorecard_id=scorecard.scorecard_id,
+                financial_hash=scorecard.financial_hash,
+            ),
+        )
+        return scorecard
+
+    def replay_profitability(
+        self,
+        ctx: TenantContext,
+        scorecard_id: str,
+    ) -> ProfitabilityScorecard:
+        record = self._tenant_record(
+            ctx,
+            "renovation_profitability_scorecards",
+            scorecard_id,
+            "profitability scorecard",
+        )
+        replayed = self.profitability.scorecard(
+            ctx.tenant_id,
+            str(record["job_id"]),
+            float(record["contracted_revenue"]),
+            float(record["estimated_cost"]),
+            tuple(
+                _job_cost_from_dict(dict(item)) for item in record.get("costs", ())
+            ),
+        )
+        original = _profitability_scorecard_from_dict(dict(record["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation profitability replay diverged")
+        return replayed
+
+    def create_invoice(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> Invoice:
+        job = self.get_job(ctx, str(payload["job_id"]))
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        invoice = self.invoicing.create_invoice(
+            ctx.tenant_id,
+            job.job_id,
+            proposal.customer.customer_id,
+            payload,
+        )
+        self.persistence.put(
+            "renovation_invoices",
+            invoice.invoice_id,
+            {
+                **self._record(ctx, payload, invoice.as_dict()),
+                "job_id": job.job_id,
+            },
+        )
+        self.event_store.append(
+            INVOICE_CREATED,
+            invoice.invoice_id,
+            self._event_payload(
+                ctx,
+                job_id=job.job_id,
+                invoice_id=invoice.invoice_id,
+                total=invoice.total,
+                due_date=invoice.due_date,
+            ),
+        )
+        return invoice
+
+    def get_invoice(self, ctx: TenantContext, invoice_id: str) -> Invoice:
+        record = self._tenant_record(
+            ctx,
+            "renovation_invoices",
+            invoice_id,
+            "invoice",
+        )
+        return _invoice_from_dict(dict(record["artifact"]))
+
+    def pay_invoice(
+        self,
+        ctx: TenantContext,
+        invoice_id: str,
+        payload: dict[str, object],
+    ) -> Invoice:
+        invoice = self.get_invoice(ctx, invoice_id)
+        updated = self.invoicing.apply_invoice_payment(invoice, payload)
+        record = self._tenant_record(
+            ctx,
+            "renovation_invoices",
+            invoice_id,
+            "invoice",
+        )
+        record["artifact"] = updated.as_dict()
+        self.persistence.put("renovation_invoices", invoice_id, record)
+        payment = updated.payment_records[-1]
+        self._persist_payment(ctx, updated.job_id, payment)
+        self.event_store.append(
+            INVOICE_PAID,
+            invoice_id,
+            self._event_payload(
+                ctx,
+                job_id=updated.job_id,
+                invoice_id=invoice_id,
+                payment_id=payment.payment_id,
+                amount=payment.amount,
+                outstanding_balance=updated.outstanding_balance,
+            ),
+        )
+        return updated
+
+    def replay_invoice(self, ctx: TenantContext, invoice_id: str) -> Invoice:
+        record = self._tenant_record(
+            ctx,
+            "renovation_invoices",
+            invoice_id,
+            "invoice",
+        )
+        original = _invoice_from_dict(dict(record["artifact"]))
+        replayed = self.invoicing.create_invoice(
+            ctx.tenant_id,
+            original.job_id,
+            original.customer_id,
+            dict(record["input"]),
+        )
+        for payment in original.payment_records:
+            replayed = self.invoicing.apply_invoice_payment(
+                replayed,
+                {
+                    "payment_date": payment.payment_date,
+                    "amount": payment.amount,
+                    "method": payment.method,
+                    "reference": payment.reference,
+                },
+            )
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation invoice replay diverged")
+        return replayed
+
+    def create_payable(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> VendorPayable:
+        job = self.get_job(ctx, str(payload["job_id"]))
+        payable = self.invoicing.create_payable(ctx.tenant_id, job.job_id, payload)
+        self.persistence.put(
+            "renovation_payables",
+            payable.payable_id,
+            {
+                **self._record(ctx, payload, payable.as_dict()),
+                "job_id": job.job_id,
+            },
+        )
+        self.event_store.append(
+            PAYABLE_CREATED,
+            payable.payable_id,
+            self._event_payload(
+                ctx,
+                job_id=job.job_id,
+                payable_id=payable.payable_id,
+                amount=payable.amount,
+                due_date=payable.due_date,
+            ),
+        )
+        return payable
+
+    def get_payable(self, ctx: TenantContext, payable_id: str) -> VendorPayable:
+        record = self._tenant_record(
+            ctx,
+            "renovation_payables",
+            payable_id,
+            "payable",
+        )
+        return _vendor_payable_from_dict(dict(record["artifact"]))
+
+    def pay_payable(
+        self,
+        ctx: TenantContext,
+        payable_id: str,
+        payload: dict[str, object],
+    ) -> VendorPayable:
+        payable = self.get_payable(ctx, payable_id)
+        updated = self.invoicing.apply_payable_payment(payable, payload)
+        record = self._tenant_record(
+            ctx,
+            "renovation_payables",
+            payable_id,
+            "payable",
+        )
+        record["artifact"] = updated.as_dict()
+        self.persistence.put("renovation_payables", payable_id, record)
+        payment = updated.payment_records[-1]
+        self._persist_payment(ctx, updated.job_id, payment)
+        self.event_store.append(
+            PAYABLE_PAID,
+            payable_id,
+            self._event_payload(
+                ctx,
+                job_id=updated.job_id,
+                payable_id=payable_id,
+                payment_id=payment.payment_id,
+                amount=payment.amount,
+                outstanding_balance=updated.outstanding_balance,
+            ),
+        )
+        return updated
+
+    def replay_payable(
+        self,
+        ctx: TenantContext,
+        payable_id: str,
+    ) -> VendorPayable:
+        record = self._tenant_record(
+            ctx,
+            "renovation_payables",
+            payable_id,
+            "payable",
+        )
+        original = _vendor_payable_from_dict(dict(record["artifact"]))
+        replayed = self.invoicing.create_payable(
+            ctx.tenant_id,
+            original.job_id,
+            dict(record["input"]),
+        )
+        for payment in original.payment_records:
+            replayed = self.invoicing.apply_payable_payment(
+                replayed,
+                {
+                    "payment_date": payment.payment_date,
+                    "amount": payment.amount,
+                    "method": payment.method,
+                    "reference": payment.reference,
+                },
+            )
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation payable replay diverged")
+        return replayed
+
+    def cash_flow_forecast(
+        self,
+        ctx: TenantContext,
+        as_of_date: str,
+    ) -> CashFlowForecast:
+        ctx.require()
+        invoices = tuple(
+            _invoice_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_invoices",
+                ctx.tenant_id,
+            )
+        )
+        payables = tuple(
+            _vendor_payable_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_payables",
+                ctx.tenant_id,
+            )
+        )
+        forecast = self.profitability.forecast(
+            ctx.tenant_id,
+            as_of_date,
+            invoices,
+            payables,
+        )
+        self.persistence.put(
+            "renovation_cash_flow_forecasts",
+            forecast.forecast_id,
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "as_of_date": as_of_date,
+                "invoices": [item.as_dict() for item in invoices],
+                "payables": [item.as_dict() for item in payables],
+                "artifact": forecast.as_dict(),
+            },
+        )
+        self.event_store.append(
+            CASH_FLOW_FORECAST_GENERATED,
+            forecast.forecast_id,
+            self._event_payload(
+                ctx,
+                forecast_id=forecast.forecast_id,
+                as_of_date=forecast.as_of_date,
+                forecast_hash=forecast.forecast_hash,
+            ),
+        )
+        return forecast
+
+    def replay_cash_flow(
+        self,
+        ctx: TenantContext,
+        forecast_id: str,
+    ) -> CashFlowForecast:
+        record = self._tenant_record(
+            ctx,
+            "renovation_cash_flow_forecasts",
+            forecast_id,
+            "cash flow forecast",
+        )
+        replayed = self.profitability.forecast(
+            ctx.tenant_id,
+            str(record["as_of_date"]),
+            tuple(_invoice_from_dict(dict(item)) for item in record["invoices"]),
+            tuple(
+                _vendor_payable_from_dict(dict(item)) for item in record["payables"]
+            ),
+        )
+        original = _cash_flow_forecast_from_dict(dict(record["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation cash flow replay diverged")
+        return replayed
+
+    def owner_financial_summary(
+        self,
+        ctx: TenantContext,
+        as_of_date: str,
+    ) -> dict[str, object]:
+        jobs = tuple(
+            _job_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_jobs",
+                ctx.tenant_id,
+            )
+        )
+        scorecards = tuple(
+            self.job_profitability(ctx, item.job_id)
+            for item in sorted(jobs, key=lambda value: value.job_id)
+        )
+        forecast = self.cash_flow_forecast(ctx, as_of_date)
+        invoices = tuple(
+            _invoice_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_invoices",
+                ctx.tenant_id,
+            )
+        )
+        payables = tuple(
+            _vendor_payable_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_payables",
+                ctx.tenant_id,
+            )
+        )
+        summary = {
+            "tenant_id": ctx.tenant_id,
+            "as_of_date": as_of_date,
+            "job_count": len(jobs),
+            "contracted_revenue": round(
+                sum(item.contracted_revenue for item in scorecards),
+                2,
+            ),
+            "actual_cost": round(sum(item.actual_cost for item in scorecards), 2),
+            "gross_profit": round(
+                sum(item.actual_gross_profit for item in scorecards),
+                2,
+            ),
+            "outstanding_receivables": round(
+                sum(item.outstanding_balance for item in invoices),
+                2,
+            ),
+            "outstanding_payables": round(
+                sum(item.outstanding_balance for item in payables),
+                2,
+            ),
+            "at_risk_jobs": sorted(
+                item.job_id
+                for item in scorecards
+                if item.cost_overrun_alert or item.margin_variance
+            ),
+            "profitability_scorecards": [item.as_dict() for item in scorecards],
+            "cash_flow_forecast": forecast.as_dict(),
+        }
+        summary["financial_hash"] = _artifact_hash(_canonical(summary))
+        self.persistence.put(
+            "renovation_owner_summaries",
+            f"{ctx.tenant_id}:{as_of_date}",
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                **summary,
+            },
+        )
+        return summary
+
+    def _persist_payment(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        payment: PaymentRecord,
+    ) -> None:
+        self.persistence.put(
+            "renovation_payments",
+            payment.payment_id,
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "job_id": job_id,
+                "artifact": payment.as_dict(),
+            },
+        )
+
     def _persist_photo(
         self,
         ctx: TenantContext,
@@ -1491,4 +2088,158 @@ def _schedule_from_dict(value: dict[str, object]) -> Schedule:
             for item in value.get("delay_impacts", ())
         ),
         schedule_hash=str(value["schedule_hash"]),
+    )
+
+
+def _actual_material_cost_from_dict(value: object) -> ActualMaterialCost | None:
+    if value is None:
+        return None
+    return ActualMaterialCost(**dict(value))
+
+
+def _actual_labor_cost_from_dict(value: object) -> ActualLaborCost | None:
+    if value is None:
+        return None
+    return ActualLaborCost(**dict(value))
+
+
+def _subcontractor_cost_from_dict(value: object) -> SubcontractorCost | None:
+    if value is None:
+        return None
+    return SubcontractorCost(**dict(value))
+
+
+def _overhead_allocation_from_dict(value: object) -> OverheadAllocation | None:
+    if value is None:
+        return None
+    return OverheadAllocation(**dict(value))
+
+
+def _job_cost_from_dict(value: dict[str, object]) -> JobCostRecord:
+    return JobCostRecord(
+        cost_record_id=str(value["cost_record_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        cost_date=str(value["cost_date"]),
+        category=str(value["category"]),
+        description=str(value["description"]),
+        amount=float(value["amount"]),
+        source_reference=str(value.get("source_reference", "")),
+        material=_actual_material_cost_from_dict(value.get("material")),
+        labor=_actual_labor_cost_from_dict(value.get("labor")),
+        subcontractor=_subcontractor_cost_from_dict(value.get("subcontractor")),
+        overhead=_overhead_allocation_from_dict(value.get("overhead")),
+    )
+
+
+def _payment_from_dict(value: dict[str, object]) -> PaymentRecord:
+    return PaymentRecord(
+        payment_id=str(value["payment_id"]),
+        tenant_id=str(value["tenant_id"]),
+        target_type=str(value["target_type"]),
+        target_id=str(value["target_id"]),
+        payment_date=str(value["payment_date"]),
+        amount=float(value["amount"]),
+        method=str(value["method"]),
+        reference=str(value.get("reference", "")),
+    )
+
+
+def _invoice_from_dict(value: dict[str, object]) -> Invoice:
+    return Invoice(
+        invoice_id=str(value["invoice_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        customer_id=str(value["customer_id"]),
+        invoice_date=str(value["invoice_date"]),
+        due_date=str(value["due_date"]),
+        description=str(value["description"]),
+        amount=float(value["amount"]),
+        tax=float(value["tax"]),
+        total=float(value["total"]),
+        paid_amount=float(value["paid_amount"]),
+        outstanding_balance=float(value["outstanding_balance"]),
+        status=str(value["status"]),
+        payment_records=tuple(
+            _payment_from_dict(dict(item)) for item in value.get("payment_records", ())
+        ),
+    )
+
+
+def _vendor_payable_from_dict(value: dict[str, object]) -> VendorPayable:
+    return VendorPayable(
+        payable_id=str(value["payable_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        vendor=str(value["vendor"]),
+        payable_date=str(value["payable_date"]),
+        due_date=str(value["due_date"]),
+        description=str(value["description"]),
+        amount=float(value["amount"]),
+        paid_amount=float(value["paid_amount"]),
+        outstanding_balance=float(value["outstanding_balance"]),
+        status=str(value["status"]),
+        payment_records=tuple(
+            _payment_from_dict(dict(item)) for item in value.get("payment_records", ())
+        ),
+    )
+
+
+def _margin_variance_from_dict(value: object) -> MarginVariance | None:
+    if value is None:
+        return None
+    return MarginVariance(**dict(value))
+
+
+def _cost_overrun_from_dict(value: object) -> CostOverrunAlert | None:
+    if value is None:
+        return None
+    return CostOverrunAlert(**dict(value))
+
+
+def _profitability_scorecard_from_dict(
+    value: dict[str, object],
+) -> ProfitabilityScorecard:
+    return ProfitabilityScorecard(
+        scorecard_id=str(value["scorecard_id"]),
+        tenant_id=str(value["tenant_id"]),
+        job_id=str(value["job_id"]),
+        contracted_revenue=float(value["contracted_revenue"]),
+        estimated_cost=float(value["estimated_cost"]),
+        actual_cost=float(value["actual_cost"]),
+        estimated_gross_profit=float(value["estimated_gross_profit"]),
+        actual_gross_profit=float(value["actual_gross_profit"]),
+        estimated_margin_percentage=float(value["estimated_margin_percentage"]),
+        actual_margin_percentage=float(value["actual_margin_percentage"]),
+        cost_variance=float(value["cost_variance"]),
+        profitability_score=float(value["profitability_score"]),
+        margin_variance=_margin_variance_from_dict(value.get("margin_variance")),
+        cost_overrun_alert=_cost_overrun_from_dict(value.get("cost_overrun_alert")),
+        financial_hash=str(value["financial_hash"]),
+    )
+
+
+def _cash_flow_window_from_dict(value: dict[str, object]) -> CashFlowWindow:
+    return CashFlowWindow(
+        days=int(value["days"]),
+        through_date=str(value["through_date"]),
+        receivables=float(value["receivables"]),
+        payables=float(value["payables"]),
+        net_cash_flow=float(value["net_cash_flow"]),
+        cumulative_net_cash_flow=float(value["cumulative_net_cash_flow"]),
+    )
+
+
+def _cash_flow_forecast_from_dict(value: dict[str, object]) -> CashFlowForecast:
+    return CashFlowForecast(
+        forecast_id=str(value["forecast_id"]),
+        tenant_id=str(value["tenant_id"]),
+        as_of_date=str(value["as_of_date"]),
+        windows=tuple(
+            _cash_flow_window_from_dict(dict(item))
+            for item in value.get("windows", ())
+        ),
+        overdue_receivables=float(value["overdue_receivables"]),
+        overdue_payables=float(value["overdue_payables"]),
+        forecast_hash=str(value["forecast_hash"]),
     )

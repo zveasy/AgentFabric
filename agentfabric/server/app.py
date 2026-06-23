@@ -2804,6 +2804,126 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except AuthorizationError as exc:
             raise HTTPException(status_code=403, detail=str(exc))
 
+    @app.post("/renovation/jobs/{job_id}/costs", tags=["renovation-os"])
+    def renovation_job_cost_create(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.finance.write"])
+        try:
+            cost = renovation.record_job_cost(ctx, job_id, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_job_costs",
+                metadata={"job_id": job_id, "cost_record_id": cost.cost_record_id},
+            )
+            return cost.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get(
+        "/renovation/jobs/{job_id}/profitability",
+        tags=["renovation-os"],
+    )
+    def renovation_job_profitability(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.profitability.read"])
+        try:
+            return renovation.job_profitability(ctx, job_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/invoices", tags=["renovation-os"])
+    def renovation_invoice_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.invoicing.write"])
+        try:
+            return renovation.create_invoice(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post(
+        "/renovation/invoices/{invoice_id}/payment",
+        tags=["renovation-os"],
+    )
+    def renovation_invoice_payment(invoice_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.invoicing.write"])
+        try:
+            return renovation.pay_invoice(ctx, invoice_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/invoices/{invoice_id}", tags=["renovation-os"])
+    def renovation_invoice_get(invoice_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.invoicing.read"])
+        try:
+            return renovation.get_invoice(ctx, invoice_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/payables", tags=["renovation-os"])
+    def renovation_payable_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.invoicing.write"])
+        try:
+            return renovation.create_payable(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post(
+        "/renovation/payables/{payable_id}/payment",
+        tags=["renovation-os"],
+    )
+    def renovation_payable_payment(payable_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.invoicing.write"])
+        try:
+            return renovation.pay_payable(ctx, payable_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/cash-flow/forecast", tags=["renovation-os"])
+    def renovation_cash_flow_forecast(as_of: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.cashflow.read"])
+        try:
+            return renovation.cash_flow_forecast(ctx, as_of).as_dict()
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/owner-summary", tags=["renovation-os"])
+    def renovation_owner_summary(as_of: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.finance.read"])
+        try:
+            return renovation.owner_financial_summary(ctx, as_of)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
     @app.post("/connectors/register", tags=["enterprise-connectors"])
     def enterprise_connector_register(payload: dict, request: Request):
         ctx = _tenant_context(request)
