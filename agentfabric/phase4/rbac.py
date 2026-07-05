@@ -7,11 +7,51 @@ from collections import defaultdict
 from agentfabric.errors import AuthorizationError
 
 
+RENOVATION_READ_SCOPES = {
+    "renovation.estimate.read",
+    "renovation.proposal.read",
+    "renovation.jobs.read",
+    "renovation.change_orders.read",
+    "renovation.scheduling.read",
+    "renovation.crews.read",
+    "renovation.profitability.read",
+    "renovation.invoicing.read",
+    "renovation.cashflow.read",
+    "renovation.finance.read",
+    "renovation.leads.read",
+    "renovation.crm.read",
+    "renovation.portal.read",
+    "renovation.mvp.read",
+    "renovation.operator.read",
+}
+
+RENOVATION_WRITE_SCOPES = {
+    "renovation.estimate.write",
+    "renovation.proposal.write",
+    "renovation.jobs.write",
+    "renovation.documentation.write",
+    "renovation.change_orders.write",
+    "renovation.change_orders.approve",
+    "renovation.scheduling.write",
+    "renovation.crews.write",
+    "renovation.deliveries.write",
+    "renovation.finance.write",
+    "renovation.invoicing.write",
+    "renovation.leads.write",
+    "renovation.crm.write",
+    "renovation.communications.write",
+    "renovation.mvp.run",
+    "renovation.operator.write",
+}
+
+
 class RbacService:
     """Role-based authorization for runtime/registry/billing actions."""
 
     ROLE_PERMISSIONS = {
         "admin": {
+            *RENOVATION_READ_SCOPES,
+            *RENOVATION_WRITE_SCOPES,
             "tenant.manage",
             "tenant.settings.manage",
             "team.manage",
@@ -114,6 +154,8 @@ class RbacService:
             "sharepoint.write",
         },
         "developer": {
+            *RENOVATION_READ_SCOPES,
+            *RENOVATION_WRITE_SCOPES,
             "agents.read",
             "agent.create",
             "agent.execute",
@@ -200,6 +242,7 @@ class RbacService:
             "sharepoint.write",
         },
         "viewer": {
+            *RENOVATION_READ_SCOPES,
             "agents.read",
             "workflow.read",
             "memory.read",
@@ -227,8 +270,29 @@ class RbacService:
             "connectors:read",
             "credentials:read",
         },
-        "owner": set(),
+        "owner": {
+            *RENOVATION_READ_SCOPES,
+            *RENOVATION_WRITE_SCOPES,
+            "tenant.manage",
+            "tenant.settings.manage",
+            "team.manage",
+            "members.manage",
+            "quotas.read",
+            "quotas.manage",
+            "usage.read",
+            "auth.admin",
+            "auth.token.issue",
+            "billing.read",
+            "billing.write",
+            "audit.read",
+            "audit.export",
+            "events.read",
+            "metrics.read",
+            "persistence.read",
+        },
         "operator": {
+            *RENOVATION_READ_SCOPES,
+            *RENOVATION_WRITE_SCOPES,
             "agent.execute",
             "runtime.run",
             "mesh.send",
@@ -449,6 +513,18 @@ class RbacService:
         "renovation.finance.write",
         "renovation.invoicing.write",
     }
+    renovation_crm_read = {
+        "renovation.crm.read",
+        "renovation.leads.read",
+        "renovation.portal.read",
+        "renovation.communications.read",
+    }
+    renovation_crm_write = {
+        "renovation.crm.write",
+        "renovation.leads.write",
+        "renovation.portal.write",
+        "renovation.communications.write",
+    }
     renovation_approve = {"renovation.change_orders.approve"}
     ROLE_PERMISSIONS["admin"].update(
         renovation_read
@@ -459,6 +535,8 @@ class RbacService:
         | renovation_scheduling_write
         | renovation_finance_read
         | renovation_finance_write
+        | renovation_crm_read
+        | renovation_crm_write
         | renovation_approve
     )
     ROLE_PERMISSIONS["developer"].update(
@@ -470,6 +548,8 @@ class RbacService:
         | renovation_scheduling_write
         | renovation_finance_read
         | renovation_finance_write
+        | renovation_crm_read
+        | renovation_crm_write
     )
     ROLE_PERMISSIONS["operator"].update(
         renovation_read
@@ -480,6 +560,8 @@ class RbacService:
         | renovation_scheduling_write
         | renovation_finance_read
         | renovation_finance_write
+        | renovation_crm_read
+        | renovation_crm_write
         | renovation_approve
     )
     ROLE_PERMISSIONS["reviewer"].update(
@@ -487,6 +569,7 @@ class RbacService:
         | renovation_operations_read
         | renovation_scheduling_read
         | renovation_finance_read
+        | renovation_crm_read
         | renovation_approve
     )
     ROLE_PERMISSIONS["auditor"].update(
@@ -494,12 +577,14 @@ class RbacService:
         | renovation_operations_read
         | renovation_scheduling_read
         | renovation_finance_read
+        | renovation_crm_read
     )
     ROLE_PERMISSIONS["viewer"].update(
         renovation_read
         | renovation_operations_read
         | renovation_scheduling_read
         | renovation_finance_read
+        | renovation_crm_read
     )
     ROLE_PERMISSIONS["service_account"].update(
         renovation_read
@@ -510,6 +595,8 @@ class RbacService:
         | renovation_scheduling_write
         | renovation_finance_read
         | renovation_finance_write
+        | renovation_crm_read
+        | renovation_crm_write
     )
 
     ROLE_PERMISSIONS["owner"] = set().union(*ROLE_PERMISSIONS.values()) | {

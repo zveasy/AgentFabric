@@ -194,6 +194,45 @@ PAYABLE_PAYLOAD = {
     "amount": 2500,
 }
 
+LEAD_PAYLOAD = {
+    "name": "Morgan Homeowner",
+    "email": "morgan@example.com",
+    "phone": "555-0140",
+    "property_address": "200 Oak Street",
+    "project_type": "kitchen_remodel",
+    "description": "Replace cabinets, counters, and flooring.",
+    "created_date": "2026-08-01",
+    "source": {
+        "source_type": "website",
+        "source_name": "renovationos-contact-form",
+        "campaign": "summer-remodel",
+    },
+}
+
+OPPORTUNITY_PAYLOAD = {
+    "project_type": "kitchen_remodel",
+    "expected_value": 30000,
+    "probability": 50,
+    "stage": "qualification",
+    "expected_close_date": "2026-09-15",
+}
+
+FOLLOW_UP_PAYLOAD = {
+    "task_type": "call",
+    "due_date": "2026-08-05",
+    "description": "Confirm site visit availability.",
+    "reminder_days_before": 2,
+}
+
+APPOINTMENT_PAYLOAD = {
+    "requested_date": "2026-08-08",
+    "requested_time": "10:00",
+    "appointment_type": "site_visit",
+    "property_address": "200 Oak Street",
+    "status": "requested",
+    "notes": "Customer prefers morning.",
+}
+
 
 def service_fixture():
     persistence = MemoryPersistenceStore()

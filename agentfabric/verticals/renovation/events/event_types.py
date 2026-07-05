@@ -33,6 +33,16 @@ MARGIN_VARIANCE_DETECTED = "renovation.margin_variance_detected"
 COST_OVERRUN_DETECTED = "renovation.cost_overrun_detected"
 CASH_FLOW_FORECAST_GENERATED = "renovation.cash_flow_forecast_generated"
 PROFITABILITY_SCORECARD_GENERATED = "renovation.profitability_scorecard_generated"
+LEAD_CREATED = "renovation.lead_created"
+LEAD_UPDATED = "renovation.lead_updated"
+LEAD_CONVERTED = "renovation.lead_converted"
+OPPORTUNITY_CREATED = "renovation.opportunity_created"
+OPPORTUNITY_STAGE_CHANGED = "renovation.opportunity_stage_changed"
+FOLLOW_UP_TASK_CREATED = "renovation.follow_up_task_created"
+APPOINTMENT_REQUESTED = "renovation.appointment_requested"
+SITE_VISIT_RECORDED = "renovation.site_visit_recorded"
+CUSTOMER_MESSAGE_RECORDED = "renovation.customer_message_recorded"
+CUSTOMER_PORTAL_VIEW_GENERATED = "renovation.customer_portal_view_generated"
 
 EVENT_TYPES = (
     ESTIMATE_CREATED,
@@ -68,4 +78,14 @@ EVENT_TYPES = (
     COST_OVERRUN_DETECTED,
     CASH_FLOW_FORECAST_GENERATED,
     PROFITABILITY_SCORECARD_GENERATED,
+    LEAD_CREATED,
+    LEAD_UPDATED,
+    LEAD_CONVERTED,
+    OPPORTUNITY_CREATED,
+    OPPORTUNITY_STAGE_CHANGED,
+    FOLLOW_UP_TASK_CREATED,
+    APPOINTMENT_REQUESTED,
+    SITE_VISIT_RECORDED,
+    CUSTOMER_MESSAGE_RECORDED,
+    CUSTOMER_PORTAL_VIEW_GENERATED,
 )

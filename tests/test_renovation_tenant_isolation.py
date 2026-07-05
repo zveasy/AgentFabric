@@ -11,6 +11,7 @@ from tests.renovation_helpers import (
     ESTIMATE_PAYLOAD,
     PROPOSAL_PAYLOAD,
     INVOICE_PAYLOAD,
+    LEAD_PAYLOAD,
     MATERIAL_COST_PAYLOAD,
     SCHEDULE_PAYLOAD,
     job_fixture,
@@ -49,6 +50,8 @@ class RenovationTenantIsolationTests(unittest.TestCase):
         self.assertIn("crew_coordination", package["capabilities"])
         self.assertIn("job_profitability", package["capabilities"])
         self.assertIn("cash_flow_forecasting", package["capabilities"])
+        self.assertIn("lead_intake", package["capabilities"])
+        self.assertIn("customer_portal", package["capabilities"])
 
     def test_cross_tenant_job_history_and_change_order_are_denied(self) -> None:
         _, _, service, context, _, _, job = job_fixture()
@@ -102,3 +105,28 @@ class RenovationTenantIsolationTests(unittest.TestCase):
             service.get_invoice(other, invoice.invoice_id)
         with self.assertRaises(AuthorizationError):
             service.job_profitability(other, job.job_id)
+
+    def test_cross_tenant_crm_and_portal_access_is_denied(self) -> None:
+        _, _, service, context, _, proposal, job = job_fixture()
+        lead = service.create_lead(context, LEAD_PAYLOAD)
+        service.record_customer_message(
+            context,
+            {
+                "customer_id": proposal.customer.customer_id,
+                "job_id": job.job_id,
+                "channel": "portal",
+                "message_date": "2026-08-10",
+                "body": "Project update.",
+            },
+        )
+        other = TenantContext("tenant-b", "org-b", "owner-b", ())
+        with self.assertRaises(AuthorizationError):
+            service.get_lead(other, lead.lead_id)
+        with self.assertRaises(AuthorizationError):
+            service.customer_portal_view(
+                other,
+                proposal.customer.customer_id,
+                "2026-08-10",
+            )
+        with self.assertRaises(AuthorizationError):
+            service.customer_job_status(other, job.job_id, "2026-08-10")

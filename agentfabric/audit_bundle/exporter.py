@@ -197,6 +197,51 @@ class AuditBundleExporter:
                 "renovation_owner_summaries",
                 tenant_id,
             ),
+            renovation_leads=_renovation_artifacts(
+                self.persistence,
+                "renovation_leads",
+                tenant_id,
+            ),
+            renovation_customers=_renovation_artifacts(
+                self.persistence,
+                "renovation_customers",
+                tenant_id,
+            ),
+            renovation_opportunities=_renovation_artifacts(
+                self.persistence,
+                "renovation_opportunities",
+                tenant_id,
+            ),
+            renovation_follow_ups=_renovation_artifacts(
+                self.persistence,
+                "renovation_follow_ups",
+                tenant_id,
+            ),
+            renovation_appointments=_renovation_artifacts(
+                self.persistence,
+                "renovation_appointments",
+                tenant_id,
+            ),
+            renovation_site_visits=_renovation_artifacts(
+                self.persistence,
+                "renovation_site_visits",
+                tenant_id,
+            ),
+            renovation_customer_messages=_renovation_artifacts(
+                self.persistence,
+                "renovation_customer_messages",
+                tenant_id,
+            ),
+            renovation_communications=_renovation_artifacts(
+                self.persistence,
+                "renovation_communications",
+                tenant_id,
+            ),
+            renovation_portal_views=_renovation_artifacts(
+                self.persistence,
+                "renovation_portal_views",
+                tenant_id,
+            ),
         )
         return bundle
 

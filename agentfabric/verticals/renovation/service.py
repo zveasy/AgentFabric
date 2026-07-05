@@ -13,7 +13,24 @@ from .change_orders import (
     ChangeOrderLine,
     ChangeOrderService,
 )
+from .communications import (
+    CommunicationService,
+    CustomerMessage,
+)
 from .crews import Crew, CrewAssignment, CrewAvailability, CrewMember, CrewService
+from .crm import (
+    AppointmentRequest,
+    CrmService,
+    FollowUpTask,
+    Opportunity,
+    SiteVisit,
+)
+from .customer_portal import (
+    DEFAULT_VISIBILITY_POLICY,
+    CustomerPortalService,
+    CustomerPortalView,
+    CustomerVisibilityPolicy,
+)
 from .deliveries import DeliveryService, MaterialDelivery
 from .documentation import (
     DailyLog,
@@ -34,17 +51,23 @@ from .events import (
     CREW_CREATED,
     CREW_UNASSIGNED,
     COST_OVERRUN_DETECTED,
+    CUSTOMER_MESSAGE_RECORDED,
+    CUSTOMER_PORTAL_VIEW_GENERATED,
     DAILY_LOG_CREATED,
     DELAY_DETECTED,
     ESTIMATE_CREATED,
     ESTIMATE_UPDATED,
     FIELD_NOTE_ADDED,
+    FOLLOW_UP_TASK_CREATED,
     ISSUE_RECORD_ADDED,
     INVOICE_CREATED,
     INVOICE_PAID,
     JOB_CREATED,
     JOB_COST_RECORDED,
     JOB_UPDATED,
+    LEAD_CONVERTED,
+    LEAD_CREATED,
+    LEAD_UPDATED,
     MARGIN_VARIANCE_DETECTED,
     MATERIAL_DELIVERY_CREATED,
     MATERIAL_DELIVERY_UPDATED,
@@ -52,11 +75,15 @@ from .events import (
     PAYABLE_CREATED,
     PAYABLE_PAID,
     PROFITABILITY_SCORECARD_GENERATED,
+    APPOINTMENT_REQUESTED,
+    OPPORTUNITY_CREATED,
+    OPPORTUNITY_STAGE_CHANGED,
     PROPOSAL_EXPORTED,
     PROPOSAL_GENERATED,
     SCHEDULE_CREATED,
     SCHEDULE_RECALCULATED,
     SCHEDULE_UPDATED,
+    SITE_VISIT_RECORDED,
 )
 from .finance import (
     ActualLaborCost,
@@ -67,6 +94,7 @@ from .finance import (
     SubcontractorCost,
 )
 from .invoicing import Invoice, InvoiceService, PaymentRecord, VendorPayable
+from .leads import Lead, LeadService, LeadSource
 from .jobs import Job, JobPhase, JobService
 from .marketplace import RENOVATION_FOUNDATION_PACKAGE
 from .models import (
@@ -114,6 +142,10 @@ class RenovationFoundationService:
         self.finance = FinanceService()
         self.invoicing = InvoiceService()
         self.profitability = ProfitabilityService()
+        self.leads = LeadService()
+        self.crm = CrmService()
+        self.communications = CommunicationService()
+        self.customer_portal = CustomerPortalService()
         self.persistence.put(
             "renovation_marketplace_packages",
             str(RENOVATION_FOUNDATION_PACKAGE["package_id"]),
@@ -442,6 +474,8 @@ class RenovationFoundationService:
             "profitability_scorecards": "renovation_profitability_scorecards",
             "margin_variances": "renovation_margin_variances",
             "cost_overrun_alerts": "renovation_cost_overrun_alerts",
+            "customer_messages": "renovation_customer_messages",
+            "communications": "renovation_communications",
         }
         history: dict[str, object] = {
             "job": job.as_dict(),
@@ -1652,6 +1686,632 @@ class RenovationFoundationService:
             },
         )
 
+    def create_lead(self, ctx: TenantContext, payload: dict[str, object]) -> Lead:
+        lead = self.leads.create(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_leads",
+            lead.lead_id,
+            self._record(ctx, payload, lead.as_dict()),
+        )
+        self.event_store.append(
+            LEAD_CREATED,
+            lead.lead_id,
+            self._event_payload(
+                ctx,
+                lead_id=lead.lead_id,
+                status=lead.status,
+                source_type=lead.source.source_type,
+                artifact_hash=_artifact_hash(lead.export_json()),
+            ),
+        )
+        return lead
+
+    def get_lead(self, ctx: TenantContext, lead_id: str) -> Lead:
+        record = self._tenant_record(ctx, "renovation_leads", lead_id, "lead")
+        return _lead_from_dict(dict(record["artifact"]))
+
+    def update_lead(
+        self,
+        ctx: TenantContext,
+        lead_id: str,
+        payload: dict[str, object],
+    ) -> Lead:
+        lead = self.get_lead(ctx, lead_id)
+        updated = self.leads.update(lead, payload)
+        record = self._tenant_record(ctx, "renovation_leads", lead_id, "lead")
+        record["artifact"] = updated.as_dict()
+        record.setdefault("updates", []).append(payload)
+        self.persistence.put("renovation_leads", lead_id, record)
+        self.event_store.append(
+            LEAD_UPDATED,
+            lead_id,
+            self._event_payload(
+                ctx,
+                lead_id=lead_id,
+                previous_status=lead.status,
+                status=updated.status,
+                artifact_hash=_artifact_hash(updated.export_json()),
+            ),
+        )
+        return updated
+
+    def replay_lead(self, ctx: TenantContext, lead_id: str) -> Lead:
+        record = self._tenant_record(ctx, "renovation_leads", lead_id, "lead")
+        replayed = self.leads.create(ctx.tenant_id, dict(record["input"]))
+        for update in record.get("updates", ()):
+            replayed = self.leads.update(replayed, dict(update))
+        if "conversion" in record:
+            replayed = self.leads.convert(
+                replayed,
+                str(dict(record["artifact"])["customer_id"]),
+            )
+        original = _lead_from_dict(dict(record["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation lead replay diverged")
+        return replayed
+
+    def convert_lead(
+        self,
+        ctx: TenantContext,
+        lead_id: str,
+        payload: dict[str, object],
+    ) -> Customer:
+        lead = self.get_lead(ctx, lead_id)
+        customer_identity = {
+            "tenant_id": ctx.tenant_id,
+            "lead_id": lead_id,
+            "name": str(payload.get("name", lead.name)),
+            "email": str(payload.get("email", lead.email)),
+            "phone": str(payload.get("phone", lead.phone)),
+            "address": str(payload.get("address", lead.property_address)),
+        }
+        customer = Customer(
+            customer_id=f"customer-{_artifact_hash(_canonical(customer_identity))[:20]}",
+            name=customer_identity["name"],
+            email=customer_identity["email"],
+            phone=customer_identity["phone"],
+            address=customer_identity["address"],
+        )
+        updated = self.leads.convert(lead, customer.customer_id)
+        lead_record = self._tenant_record(ctx, "renovation_leads", lead_id, "lead")
+        lead_record["artifact"] = updated.as_dict()
+        lead_record["conversion"] = payload
+        self.persistence.put("renovation_leads", lead_id, lead_record)
+        self.persistence.put(
+            "renovation_customers",
+            customer.customer_id,
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "lead_id": lead_id,
+                "artifact": customer.as_dict(),
+            },
+        )
+        self.event_store.append(
+            LEAD_CONVERTED,
+            lead_id,
+            self._event_payload(
+                ctx,
+                lead_id=lead_id,
+                customer_id=customer.customer_id,
+            ),
+        )
+        return customer
+
+    def create_opportunity(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> Opportunity:
+        self._validate_crm_target(ctx, payload)
+        opportunity = self.crm.opportunity(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_opportunities",
+            opportunity.opportunity_id,
+            self._record(ctx, payload, opportunity.as_dict()),
+        )
+        self.event_store.append(
+            OPPORTUNITY_CREATED,
+            opportunity.opportunity_id,
+            self._event_payload(
+                ctx,
+                opportunity_id=opportunity.opportunity_id,
+                lead_id=opportunity.lead_id,
+                customer_id=opportunity.customer_id,
+                stage=opportunity.stage,
+            ),
+        )
+        return opportunity
+
+    def get_opportunity(
+        self,
+        ctx: TenantContext,
+        opportunity_id: str,
+    ) -> Opportunity:
+        record = self._tenant_record(
+            ctx,
+            "renovation_opportunities",
+            opportunity_id,
+            "opportunity",
+        )
+        return _opportunity_from_dict(dict(record["artifact"]))
+
+    def update_opportunity_stage(
+        self,
+        ctx: TenantContext,
+        opportunity_id: str,
+        stage: str,
+    ) -> Opportunity:
+        current = self.get_opportunity(ctx, opportunity_id)
+        updated = self.crm.update_stage(current, stage)
+        record = self._tenant_record(
+            ctx,
+            "renovation_opportunities",
+            opportunity_id,
+            "opportunity",
+        )
+        record["artifact"] = updated.as_dict()
+        record.setdefault("stage_updates", []).append(stage)
+        self.persistence.put("renovation_opportunities", opportunity_id, record)
+        self.event_store.append(
+            OPPORTUNITY_STAGE_CHANGED,
+            opportunity_id,
+            self._event_payload(
+                ctx,
+                opportunity_id=opportunity_id,
+                previous_stage=current.stage,
+                stage=updated.stage,
+            ),
+        )
+        return updated
+
+    def replay_opportunity(
+        self,
+        ctx: TenantContext,
+        opportunity_id: str,
+    ) -> Opportunity:
+        record = self._tenant_record(
+            ctx,
+            "renovation_opportunities",
+            opportunity_id,
+            "opportunity",
+        )
+        replayed = self.crm.opportunity(ctx.tenant_id, dict(record["input"]))
+        for stage in record.get("stage_updates", ()):
+            replayed = self.crm.update_stage(replayed, str(stage))
+        original = _opportunity_from_dict(dict(record["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation opportunity replay diverged")
+        return replayed
+
+    def create_follow_up(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> FollowUpTask:
+        if payload.get("lead_id"):
+            self.get_lead(ctx, str(payload["lead_id"]))
+        if payload.get("opportunity_id"):
+            self.get_opportunity(ctx, str(payload["opportunity_id"]))
+        follow_up = self.crm.follow_up(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_follow_ups",
+            follow_up.follow_up_id,
+            self._record(ctx, payload, follow_up.as_dict()),
+        )
+        self.event_store.append(
+            FOLLOW_UP_TASK_CREATED,
+            follow_up.follow_up_id,
+            self._event_payload(
+                ctx,
+                follow_up_id=follow_up.follow_up_id,
+                lead_id=follow_up.lead_id,
+                opportunity_id=follow_up.opportunity_id,
+                due_date=follow_up.due_date,
+            ),
+        )
+        return follow_up
+
+    def create_appointment(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> AppointmentRequest:
+        self._validate_crm_target(ctx, payload)
+        appointment = self.crm.appointment(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_appointments",
+            appointment.appointment_id,
+            self._record(ctx, payload, appointment.as_dict()),
+        )
+        self.event_store.append(
+            APPOINTMENT_REQUESTED,
+            appointment.appointment_id,
+            self._event_payload(
+                ctx,
+                appointment_id=appointment.appointment_id,
+                lead_id=appointment.lead_id,
+                customer_id=appointment.customer_id,
+                requested_date=appointment.requested_date,
+            ),
+        )
+        return appointment
+
+    def create_site_visit(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> SiteVisit:
+        record = self._tenant_record(
+            ctx,
+            "renovation_appointments",
+            str(payload["appointment_id"]),
+            "appointment",
+        )
+        appointment = _appointment_from_dict(dict(record["artifact"]))
+        visit = self.crm.site_visit(ctx.tenant_id, appointment, payload)
+        self.persistence.put(
+            "renovation_site_visits",
+            visit.site_visit_id,
+            self._record(ctx, payload, visit.as_dict()),
+        )
+        self.event_store.append(
+            SITE_VISIT_RECORDED,
+            visit.site_visit_id,
+            self._event_payload(
+                ctx,
+                site_visit_id=visit.site_visit_id,
+                appointment_id=visit.appointment_id,
+                lead_id=visit.lead_id,
+                customer_id=visit.customer_id,
+            ),
+        )
+        return visit
+
+    def record_customer_message(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> CustomerMessage:
+        customer_id = str(payload["customer_id"])
+        self._customer_record(ctx, customer_id)
+        job_id = str(payload.get("job_id", ""))
+        if job_id and self._job_customer_id(ctx, job_id) != customer_id:
+            raise AuthorizationError("customer message job belongs to another customer")
+        message, communication = self.communications.message(ctx.tenant_id, payload)
+        self.persistence.put(
+            "renovation_customer_messages",
+            message.message_id,
+            self._record(ctx, payload, message.as_dict()),
+        )
+        self.persistence.put(
+            "renovation_communications",
+            communication.communication_id,
+            self._record(ctx, payload, communication.as_dict()),
+        )
+        self.event_store.append(
+            CUSTOMER_MESSAGE_RECORDED,
+            message.message_id,
+            self._event_payload(
+                ctx,
+                customer_id=customer_id,
+                job_id=job_id,
+                message_id=message.message_id,
+                communication_id=communication.communication_id,
+                channel=message.channel,
+            ),
+        )
+        return message
+
+    def customer_portal_view(
+        self,
+        ctx: TenantContext,
+        customer_id: str,
+        generated_date: str,
+    ) -> CustomerPortalView:
+        self._customer_record(ctx, customer_id)
+        projects = tuple(
+            self._customer_project_projection(ctx, job)
+            for job in sorted(
+                (
+                    _job_from_dict(dict(item["artifact"]))
+                    for item in self.persistence.list_tenant(
+                        "renovation_jobs",
+                        ctx.tenant_id,
+                    )
+                    if self._job_customer_id(
+                        ctx,
+                        str(dict(item["artifact"])["job_id"]),
+                    )
+                    == customer_id
+                ),
+                key=lambda item: item.job_id,
+            )
+        )
+        communications = tuple(
+            {
+                "message_id": message.message_id,
+                "job_id": message.job_id,
+                "channel": message.channel,
+                "direction": message.direction,
+                "message_date": message.message_date,
+                "subject": message.subject,
+                "body": message.body,
+            }
+            for message in sorted(
+                (
+                    _customer_message_from_dict(dict(item["artifact"]))
+                    for item in self.persistence.list_tenant(
+                        "renovation_customer_messages",
+                        ctx.tenant_id,
+                    )
+                    if dict(item["artifact"]).get("customer_id") == customer_id
+                    and dict(item["artifact"]).get("visibility") == "customer"
+                ),
+                key=lambda item: (item.message_date, item.message_id),
+            )
+        )
+        view = self.customer_portal.view(
+            ctx.tenant_id,
+            customer_id,
+            generated_date,
+            projects,
+            communications,
+        )
+        self.persistence.put(
+            "renovation_portal_views",
+            view.portal_view_id,
+            {
+                "tenant_id": ctx.tenant_id,
+                "organization_id": ctx.organization_id,
+                "created_by": ctx.principal_id,
+                "customer_id": customer_id,
+                "generated_date": generated_date,
+                "policy": DEFAULT_VISIBILITY_POLICY.as_dict(),
+                "projects": list(projects),
+                "communications": list(communications),
+                "artifact": view.as_dict(),
+            },
+        )
+        self.event_store.append(
+            CUSTOMER_PORTAL_VIEW_GENERATED,
+            view.portal_view_id,
+            self._event_payload(
+                ctx,
+                customer_id=customer_id,
+                portal_view_id=view.portal_view_id,
+                policy_id=view.policy_id,
+                view_hash=view.view_hash,
+            ),
+        )
+        return view
+
+    def replay_customer_portal_view(
+        self,
+        ctx: TenantContext,
+        portal_view_id: str,
+    ) -> CustomerPortalView:
+        record = self._tenant_record(
+            ctx,
+            "renovation_portal_views",
+            portal_view_id,
+            "customer portal view",
+        )
+        replayed = self.customer_portal.view(
+            ctx.tenant_id,
+            str(record["customer_id"]),
+            str(record["generated_date"]),
+            tuple(dict(item) for item in record["projects"]),
+            tuple(dict(item) for item in record["communications"]),
+            _visibility_policy_from_dict(dict(record["policy"])),
+        )
+        original = _portal_view_from_dict(dict(record["artifact"]))
+        if replayed.export_json() != original.export_json():
+            raise ValueError("renovation customer portal replay diverged")
+        return replayed
+
+    def customer_job_status(
+        self,
+        ctx: TenantContext,
+        job_id: str,
+        generated_date: str,
+    ) -> dict[str, object]:
+        customer_id = self._job_customer_id(ctx, job_id)
+        view = self.customer_portal_view(ctx, customer_id, generated_date)
+        project = next(
+            (item for item in view.projects if item["job_id"] == job_id),
+            None,
+        )
+        if project is None:
+            raise NotFoundError("renovation customer job status not found")
+        return {
+            "customer_id": customer_id,
+            "generated_date": generated_date,
+            "policy_id": view.policy_id,
+            "project": project,
+        }
+
+    def _customer_project_projection(
+        self,
+        ctx: TenantContext,
+        job: Job,
+    ) -> dict[str, object]:
+        proposal = self.get_proposal(ctx, job.proposal_id)
+        schedule_records = [
+            _schedule_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_schedules",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job.job_id
+        ]
+        schedule = (
+            sorted(schedule_records, key=lambda item: (item.revision, item.schedule_id))[-1]
+            if schedule_records
+            else None
+        )
+        daily_logs = [
+            item
+            for item in self.persistence.list_tenant(
+                "renovation_daily_logs",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job.job_id
+            and not bool(dict(item.get("input", {})).get("internal", False))
+            and dict(item.get("input", {})).get("visibility", "customer") != "internal"
+        ]
+        photos = [
+            _photo_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_photo_records",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job.job_id
+            and bool(
+                dict(item.get("input", {})).get(
+                    "approved_for_customer",
+                    dict(item.get("input", {})).get("customer_visible", False),
+                )
+            )
+        ]
+        change_orders = [
+            _change_order_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_change_orders",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job.job_id
+            and dict(item["artifact"]).get("status") == "approved"
+        ]
+        invoices = [
+            _invoice_from_dict(dict(item["artifact"]))
+            for item in self.persistence.list_tenant(
+                "renovation_invoices",
+                ctx.tenant_id,
+            )
+            if dict(item["artifact"]).get("job_id") == job.job_id
+        ]
+        current_phase = next(
+            (item.name for item in job.phases if item.phase_id == job.current_phase),
+            "",
+        )
+        return {
+            "job_id": job.job_id,
+            "project_title": job.title,
+            "project_status": job.status,
+            "scope_summary": list(proposal.scope_of_work),
+            "current_phase": current_phase,
+            "approved_timeline": (
+                {
+                    "start_date": schedule.start_date,
+                    "projected_completion_date": schedule.projected_completion_date,
+                    "phases": [
+                        {
+                            "name": item.name,
+                            "start_date": item.planned_start,
+                            "end_date": item.planned_end,
+                            "status": item.status,
+                        }
+                        for item in schedule.phases
+                    ],
+                }
+                if schedule
+                else None
+            ),
+            "recent_progress": [
+                {
+                    "work_date": str(dict(item["artifact"])["work_date"]),
+                    "summary": str(dict(item["artifact"])["summary"]),
+                    "completed_work": list(
+                        dict(item["artifact"]).get("completed_work", ())
+                    ),
+                    "next_steps": list(dict(item["artifact"]).get("next_steps", ())),
+                }
+                for item in sorted(
+                    daily_logs,
+                    key=lambda value: (
+                        str(dict(value["artifact"])["work_date"]),
+                        str(dict(value["artifact"])["daily_log_id"]),
+                    ),
+                    reverse=True,
+                )[:5]
+            ],
+            "approved_photos": [
+                {
+                    "photo_record_id": item.photo_record_id,
+                    "captured_date": item.captured_date,
+                    "storage_reference": item.storage_reference,
+                    "caption": item.caption,
+                    "phase_id": item.phase_id,
+                }
+                for item in sorted(photos, key=lambda value: value.photo_record_id)
+            ],
+            "approved_change_orders": [
+                {
+                    "change_order_id": item.change_order_id,
+                    "title": item.title,
+                    "description": item.description,
+                    "status": item.status,
+                    "total_adjustment": item.total_adjustment,
+                    "schedule_delta_days": item.schedule_delta_days,
+                }
+                for item in sorted(
+                    change_orders,
+                    key=lambda value: value.change_order_id,
+                )
+            ],
+            "invoice_status": [
+                {
+                    "invoice_id": item.invoice_id,
+                    "description": item.description,
+                    "due_date": item.due_date,
+                    "total": item.total,
+                    "paid_amount": item.paid_amount,
+                    "outstanding_balance": item.outstanding_balance,
+                    "status": item.status,
+                }
+                for item in sorted(invoices, key=lambda value: value.invoice_id)
+            ],
+        }
+
+    def _validate_crm_target(
+        self,
+        ctx: TenantContext,
+        payload: dict[str, object],
+    ) -> None:
+        if payload.get("lead_id"):
+            self.get_lead(ctx, str(payload["lead_id"]))
+        if payload.get("customer_id"):
+            self._customer_record(ctx, str(payload["customer_id"]))
+
+    def _customer_record(
+        self,
+        ctx: TenantContext,
+        customer_id: str,
+    ) -> dict[str, object]:
+        record = self.persistence.get("renovation_customers", customer_id)
+        if record is not None:
+            if record.get("tenant_id") != ctx.tenant_id:
+                raise AuthorizationError("cross-tenant renovation customer access denied")
+            return record
+        for item in self.persistence.list("renovation_proposals"):
+            customer = dict(dict(item["artifact"])["customer"])
+            if customer.get("customer_id") == customer_id:
+                if item.get("tenant_id") != ctx.tenant_id:
+                    raise AuthorizationError(
+                        "cross-tenant renovation customer access denied"
+                    )
+                return {
+                    "tenant_id": ctx.tenant_id,
+                    "artifact": customer,
+                }
+        raise NotFoundError("renovation customer not found")
+
+    def _job_customer_id(self, ctx: TenantContext, job_id: str) -> str:
+        job = self.get_job(ctx, job_id)
+        return self.get_proposal(ctx, job.proposal_id).customer.customer_id
+
     def _persist_photo(
         self,
         ctx: TenantContext,
@@ -2242,4 +2902,105 @@ def _cash_flow_forecast_from_dict(value: dict[str, object]) -> CashFlowForecast:
         overdue_receivables=float(value["overdue_receivables"]),
         overdue_payables=float(value["overdue_payables"]),
         forecast_hash=str(value["forecast_hash"]),
+    )
+
+
+def _lead_source_from_dict(value: dict[str, object]) -> LeadSource:
+    return LeadSource(
+        source_type=str(value["source_type"]),
+        source_name=str(value["source_name"]),
+        campaign=str(value.get("campaign", "")),
+        referral_name=str(value.get("referral_name", "")),
+    )
+
+
+def _lead_from_dict(value: dict[str, object]) -> Lead:
+    return Lead(
+        lead_id=str(value["lead_id"]),
+        tenant_id=str(value["tenant_id"]),
+        name=str(value["name"]),
+        email=str(value.get("email", "")),
+        phone=str(value.get("phone", "")),
+        property_address=str(value.get("property_address", "")),
+        project_type=str(value["project_type"]),
+        description=str(value.get("description", "")),
+        status=str(value["status"]),
+        source=_lead_source_from_dict(dict(value["source"])),
+        created_date=str(value["created_date"]),
+        last_contact_date=str(value.get("last_contact_date", "")),
+        lost_reason=str(value.get("lost_reason", "")),
+        customer_id=str(value.get("customer_id", "")),
+    )
+
+
+def _opportunity_from_dict(value: dict[str, object]) -> Opportunity:
+    return Opportunity(
+        opportunity_id=str(value["opportunity_id"]),
+        tenant_id=str(value["tenant_id"]),
+        lead_id=str(value.get("lead_id", "")),
+        customer_id=str(value.get("customer_id", "")),
+        project_type=str(value["project_type"]),
+        expected_value=float(value["expected_value"]),
+        probability=float(value["probability"]),
+        stage=str(value["stage"]),
+        expected_close_date=str(value["expected_close_date"]),
+        weighted_value=float(value["weighted_value"]),
+    )
+
+
+def _appointment_from_dict(value: dict[str, object]) -> AppointmentRequest:
+    return AppointmentRequest(
+        appointment_id=str(value["appointment_id"]),
+        tenant_id=str(value["tenant_id"]),
+        lead_id=str(value.get("lead_id", "")),
+        customer_id=str(value.get("customer_id", "")),
+        requested_date=str(value["requested_date"]),
+        requested_time=str(value.get("requested_time", "")),
+        appointment_type=str(value["appointment_type"]),
+        property_address=str(value["property_address"]),
+        status=str(value["status"]),
+        notes=str(value.get("notes", "")),
+    )
+
+
+def _customer_message_from_dict(value: dict[str, object]) -> CustomerMessage:
+    return CustomerMessage(
+        message_id=str(value["message_id"]),
+        tenant_id=str(value["tenant_id"]),
+        customer_id=str(value["customer_id"]),
+        job_id=str(value.get("job_id", "")),
+        channel=str(value["channel"]),
+        direction=str(value["direction"]),
+        message_date=str(value["message_date"]),
+        subject=str(value.get("subject", "")),
+        body=str(value["body"]),
+        visibility=str(value["visibility"]),
+    )
+
+
+def _visibility_policy_from_dict(
+    value: dict[str, object],
+) -> CustomerVisibilityPolicy:
+    return CustomerVisibilityPolicy(
+        policy_id=str(value["policy_id"]),
+        version=str(value["version"]),
+        allowed_sections=tuple(str(item) for item in value["allowed_sections"]),
+        require_photo_approval=bool(value["require_photo_approval"]),
+        exclude_internal_notes=bool(value["exclude_internal_notes"]),
+        exclude_internal_financials=bool(value["exclude_internal_financials"]),
+    )
+
+
+def _portal_view_from_dict(value: dict[str, object]) -> CustomerPortalView:
+    return CustomerPortalView(
+        portal_view_id=str(value["portal_view_id"]),
+        tenant_id=str(value["tenant_id"]),
+        customer_id=str(value["customer_id"]),
+        generated_date=str(value["generated_date"]),
+        policy_id=str(value["policy_id"]),
+        projects=tuple(dict(item) for item in value.get("projects", ())),
+        communications=tuple(
+            dict(item) for item in value.get("communications", ())
+        ),
+        view_hash=str(value["view_hash"]),
     )

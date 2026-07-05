@@ -10,9 +10,9 @@ import time
 from collections import defaultdict
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response as FastAPIResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -79,7 +79,7 @@ from agentfabric.mesh import AgentDirectory, AgentDiscovery, MeshMessage, Messag
 from agentfabric.migrations import MigrationRunner
 from agentfabric.observability import DeploymentHealth, MetricsRegistry, TenantUsageMetrics
 from agentfabric.phase2.models import Rating
-from agentfabric.persistence import MemoryPersistenceStore
+from agentfabric.persistence import MemoryPersistenceStore, SQLitePersistenceStore
 from agentfabric.production.control_plane import ProductionControlPlane
 from agentfabric.quotas import LimitEnforcer, QuotaPolicy, QuotaTracker
 from agentfabric.reputation import ReputationService
@@ -113,6 +113,9 @@ from agentfabric.server.services import AuditService, BillingService, PackageSer
 from agentfabric.server.signing import CosignVerifier, DigestFallbackVerifier
 from agentfabric.tools import ToolManifest, ToolPermission, ToolRegistry, ToolRouter
 from agentfabric.verticals.renovation import RenovationFoundationService
+from agentfabric.verticals.renovation.mvp import RenovationMvpWorkflow
+from agentfabric.verticals.renovation.operator import RenovationOperatorCockpit
+from agentfabric.verticals.renovation.saas import LocalAttachmentStore
 from veil_client import MockVeilClient
 
 HTTP_REQUEST_COUNT = Counter(
@@ -150,6 +153,1554 @@ def choose_cloud_queue(settings: Settings):
     if settings.cloud_queue_backend == "redis":
         return RedisJobQueue(settings.redis_url, fallback=settings.environment != "production")
     return MemoryJobQueue()
+
+
+def _sqlite_path_from_url(database_url: str) -> Path | None:
+    prefix = "sqlite:///"
+    if not database_url.startswith(prefix):
+        return None
+    raw_path = database_url[len(prefix) :]
+    if raw_path == ":memory:":
+        return None
+    return Path(raw_path)
+
+
+def _is_sqlite_memory_url(database_url: str) -> bool:
+    return database_url == "sqlite:///:memory:"
+
+
+def choose_state_store(settings: Settings):
+    backend = settings.state_store_backend.lower()
+    if backend == "memory":
+        return MemoryPersistenceStore()
+    if backend != "sqlite":
+        raise RuntimeError("AGENTFABRIC_STATE_STORE_BACKEND must be memory or sqlite")
+    if settings.state_store_path:
+        path = Path(settings.state_store_path)
+    else:
+        database_path = _sqlite_path_from_url(settings.database_url)
+        if database_path is None and _is_sqlite_memory_url(settings.database_url):
+            return MemoryPersistenceStore()
+        path = (
+            database_path.with_name(f"{database_path.stem}.state.db")
+            if database_path is not None
+            else Path("agentfabric_state.db")
+        )
+    store = SQLitePersistenceStore(path)
+    store.initialize()
+    return store
+
+
+def _renovation_app_html_legacy() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RenovationOS Cockpit</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2630;
+      --muted: #657180;
+      --line: #d8dee6;
+      --panel: #ffffff;
+      --page: #f4f6f8;
+      --accent: #176b5c;
+      --accent-strong: #0f4d42;
+      --soft: #e8f3f0;
+      --warn: #a35412;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0; }
+    main { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 65px); }
+    aside {
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+    section { padding: 20px; }
+    label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 13px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 11px;
+      font: inherit;
+      background: white;
+      color: var(--ink);
+    }
+    textarea { min-height: 118px; resize: vertical; }
+    button {
+      margin-top: 16px;
+      border: 0;
+      border-radius: 6px;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 650;
+      color: white;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-strong); }
+    button:disabled { cursor: wait; opacity: .65; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .button-row button { width: 100%; }
+    .secondary { background: #3f4f5f; }
+    .secondary:hover { background: #2f3d4a; }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 12px 0 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .metric strong { font-size: 18px; overflow-wrap: anywhere; }
+    .panel { margin-top: 12px; }
+    .panel h2 { margin: 0 0 10px; font-size: 15px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 9px 7px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    tr[data-run-id] { cursor: pointer; }
+    tr[data-run-id]:hover { background: var(--soft); }
+    .timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .step { border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fbfcfd; }
+    .step strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+    .step span { color: var(--muted); font-size: 12px; }
+    .completed { border-color: #8abfaf; background: #eef8f4; }
+    .failed { border-color: #e09a91; background: #fff1ef; }
+    .running { border-color: #d8ad5b; background: #fff8e8; }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #29333d;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .empty { color: var(--muted); }
+    .error { color: var(--bad); }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RenovationOS Operator Cockpit</h1>
+  </header>
+  <main>
+    <aside>
+      <label for="token">Bearer token</label>
+      <input id="token" type="password" autocomplete="off" placeholder="Paste an AgentFabric token">
+      <label for="idempotency">Idempotency key</label>
+      <input id="idempotency" autocomplete="off" placeholder="demo-run-001">
+      <label for="payload">Custom run JSON</label>
+      <textarea id="payload" spellcheck="false">{
+  "lead": {"name": "Morgan Homeowner"},
+  "project": {"title": "Kitchen Remodel"}
+}</textarea>
+      <div class="button-row">
+        <button id="run-demo">Run Demo</button>
+        <button id="run-custom" class="secondary">Create Run</button>
+      </div>
+      <div class="button-row">
+        <button id="replay" class="secondary">Replay</button>
+        <button id="resume" class="secondary">Resume</button>
+      </div>
+      <button id="refresh" class="secondary">Refresh Cockpit</button>
+      <p class="hint">Use the cockpit for live operating records, and the MVP panel for replayable end-to-end demos.</p>
+      <p id="error" class="hint error"></p>
+    </aside>
+    <section>
+      <div class="grid">
+        <div class="metric"><span>Total leads</span><strong id="metric-leads">-</strong></div>
+        <div class="metric"><span>Active jobs</span><strong id="metric-jobs">-</strong></div>
+        <div class="metric"><span>Invoiced revenue</span><strong id="metric-invoiced">-</strong></div>
+        <div class="metric"><span>Outstanding</span><strong id="metric-outstanding">-</strong></div>
+      </div>
+      <div class="panel">
+        <h2>Dashboard Summary</h2>
+        <pre id="metrics">Loading metrics...</pre>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <h2>Lead Intake</h2>
+          <textarea id="lead-json" spellcheck="false">{
+  "name": "Morgan Homeowner",
+  "email": "morgan@example.com",
+  "phone": "555-0140",
+  "property_address": "200 Oak Street",
+  "project_type": "kitchen_remodel",
+  "description": "Replace cabinets, counters, and flooring.",
+  "created_date": "2026-08-01",
+  "source": {"source_type": "website", "source_name": "renovationos-contact-form"}
+}</textarea>
+          <button id="create-lead">Create Lead</button>
+        </div>
+        <div class="panel">
+          <h2>Estimate Builder</h2>
+          <textarea id="estimate-json" spellcheck="false">{
+  "project_id": "project-kitchen-1",
+  "scope_description": "Cabinet replacement\\nFlooring replacement",
+  "rooms": [{"name": "Kitchen", "length_ft": 20, "width_ft": 15, "quantity": 1}],
+  "quantities": {"cabinetry": 10, "flooring": 300},
+  "labor_rate": 65,
+  "contingency_percentage": 10,
+  "tax_percentage": 6
+}</textarea>
+          <button id="create-estimate">Create Estimate</button>
+        </div>
+        <div class="panel">
+          <h2>Job Action</h2>
+          <label for="job-select">Selected job</label>
+          <select id="job-select"></select>
+          <label for="job-status">Status</label>
+          <input id="job-status" value="in_progress">
+          <button id="update-status">Update Status</button>
+        </div>
+        <div class="panel">
+          <h2>Cost / Invoice</h2>
+          <textarea id="finance-json" spellcheck="false">{"amount": 5000, "invoice_date": "2026-07-01", "due_date": "2026-07-15", "description": "Project deposit"}</textarea>
+          <div class="button-row">
+            <button id="create-cost" class="secondary">Cost</button>
+            <button id="create-invoice">Invoice</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Customer List</h2>
+        <table><thead><tr><th>Customer</th><th>Email</th><th>Phone</th></tr></thead><tbody id="customers"><tr><td colspan="3" class="empty">Loading customers...</td></tr></tbody></table>
+      </div>
+      <div class="panel">
+        <h2>Lead Pipeline</h2>
+        <table><thead><tr><th>Lead</th><th>Status</th><th>Project</th><th>Customer</th></tr></thead><tbody id="leads"><tr><td colspan="4" class="empty">Loading leads...</td></tr></tbody></table>
+      </div>
+      <div class="panel">
+        <h2>Proposal View</h2>
+        <table><thead><tr><th>Proposal</th><th>Status</th><th>Customer</th><th>Total</th></tr></thead><tbody id="proposals"><tr><td colspan="4" class="empty">Loading proposals...</td></tr></tbody></table>
+      </div>
+      <div class="panel">
+        <h2>Job Board</h2>
+        <table><thead><tr><th>Job</th><th>Status</th><th>Project</th><th>Customer</th></tr></thead><tbody id="jobs"><tr><td colspan="4" class="empty">Loading jobs...</td></tr></tbody></table>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <h2>Schedule View</h2>
+          <textarea id="schedule-json" spellcheck="false">{"start_date": "2026-07-06"}</textarea>
+          <button id="create-schedule">Add Schedule</button>
+          <pre id="schedule-view">No job selected.</pre>
+        </div>
+        <div class="panel">
+          <h2>Cost / Profitability</h2>
+          <pre id="profitability">No job selected.</pre>
+        </div>
+        <div class="panel">
+          <h2>Invoice / Payment</h2>
+          <label for="invoice-select">Invoice</label>
+          <select id="invoice-select"></select>
+          <textarea id="payment-json" spellcheck="false">{"payment_date": "2026-07-05", "amount": 1000, "method": "ach"}</textarea>
+          <button id="record-payment">Record Payment</button>
+        </div>
+        <div class="panel">
+          <h2>Customer Portal Preview</h2>
+          <pre id="job-portal">No job selected.</pre>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="metric"><span>MVP status</span><strong id="status">Idle</strong></div>
+        <div class="metric"><span>MVP run</span><strong id="run-id">-</strong></div>
+        <div class="metric"><span>Invoice balance</span><strong id="balance">-</strong></div>
+        <div class="metric"><span>Margin</span><strong id="margin">-</strong></div>
+      </div>
+      <div class="panel">
+        <h2>MVP Runs / Replay / Resume</h2>
+        <table>
+          <thead><tr><th>Run</th><th>Status</th><th>Job</th><th>Failed Step</th></tr></thead>
+          <tbody id="runs"><tr><td colspan="4" class="empty">No runs loaded.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Workflow Timeline</h2>
+        <div id="timeline" class="timeline"><div class="empty">Select or create a run.</div></div>
+      </div>
+      <div class="panel">
+        <h2>Financial Summary</h2>
+        <pre id="financial">No financial summary yet.</pre>
+      </div>
+      <div class="panel">
+        <h2>Portal Preview</h2>
+        <pre id="portal">No portal view yet.</pre>
+      </div>
+      <div class="panel">
+        <h2>Run Detail</h2>
+        <pre id="raw">{}</pre>
+      </div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let selectedRunId = "";
+    function headers() {
+      const token = $("token").value.trim();
+      return {"Content-Type": "application/json", ...(token ? {"Authorization": `Bearer ${token}`} : {})};
+    }
+    async function api(path, options = {}) {
+      $("error").textContent = "";
+      const response = await fetch(path, {...options, headers: {...headers(), ...(options.headers || {})}});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || response.statusText);
+      return data;
+    }
+    function customPayload() {
+      const body = JSON.parse($("payload").value || "{}");
+      const key = $("idempotency").value.trim();
+      return key ? {...body, idempotency_key: key} : body;
+    }
+    function money(value) {
+      return `$${Number(value || 0).toFixed(2)}`;
+    }
+    function artifact(record) {
+      return record?.artifact || record || {};
+    }
+    function tableEmpty(id, cols, text) {
+      $(id).innerHTML = `<tr><td colspan="${cols}" class="empty">${text}</td></tr>`;
+    }
+    function selectedJobId() {
+      return $("job-select").value;
+    }
+    async function loadCockpit() {
+      try {
+        $("metrics").textContent = "Loading metrics...";
+        const [metrics, customers, leads, proposals, jobs, account, accounts, files, notifications, company] = await Promise.all([
+          api("/renovation/metrics"),
+          api("/renovation/customers"),
+          api("/renovation/leads"),
+          api("/renovation/proposals"),
+          api("/renovation/jobs"),
+          api("/renovation/account"),
+          api("/renovation/accounts"),
+          api("/renovation/files"),
+          api("/renovation/notifications"),
+          api("/renovation/settings/company"),
+        ]);
+        $("metric-leads").textContent = metrics.total_leads;
+        $("metric-jobs").textContent = metrics.active_jobs;
+        $("metric-invoiced").textContent = money(metrics.invoiced_revenue);
+        $("metric-outstanding").textContent = money(metrics.outstanding_receivables);
+        $("metrics").textContent = JSON.stringify(metrics, null, 2);
+        if (!customers.items.length) tableEmpty("customers", 3, "No customers yet.");
+        else $("customers").innerHTML = customers.items.map((record) => {
+          const item = artifact(record);
+          return `<tr><td>${item.name || item.customer_id}</td><td>${item.email || "-"}</td><td>${item.phone || "-"}</td></tr>`;
+        }).join("");
+        if (!leads.items.length) tableEmpty("leads", 4, "No leads yet.");
+        else $("leads").innerHTML = leads.items.map((record) => {
+          const item = artifact(record);
+          return `<tr><td>${item.name || item.lead_id}</td><td>${item.status || "-"}</td><td>${item.project_type || "-"}</td><td>${item.customer_id || "-"}</td></tr>`;
+        }).join("");
+        if (!proposals.items.length) tableEmpty("proposals", 4, "No proposals yet.");
+        else $("proposals").innerHTML = proposals.items.map((record) => {
+          const item = artifact(record);
+          const customer = item.customer || {};
+          const estimate = item.estimate || {};
+          return `<tr><td>${item.proposal_id}</td><td>${record.status || item.status || "-"}</td><td>${customer.name || customer.customer_id || "-"}</td><td>${money(estimate.total)}</td></tr>`;
+        }).join("");
+        if (!jobs.items.length) {
+          tableEmpty("jobs", 4, "No jobs yet.");
+          $("job-select").innerHTML = "";
+        } else {
+          $("jobs").innerHTML = jobs.items.map((record) => {
+            const item = artifact(record);
+            return `<tr data-job-id="${item.job_id}"><td>${item.job_id}</td><td>${item.status}</td><td>${item.project_id || "-"}</td><td>${item.customer_id || "-"}</td></tr>`;
+          }).join("");
+          $("job-select").innerHTML = jobs.items.map((record) => {
+            const item = artifact(record);
+            return `<option value="${item.job_id}">${item.job_id} (${item.status})</option>`;
+          }).join("");
+          document.querySelectorAll("tr[data-job-id]").forEach((row) => {
+            row.addEventListener("click", async () => {
+              $("job-select").value = row.dataset.jobId;
+              await loadJobPanels();
+            });
+          });
+          if (!$("job-select").value) $("job-select").value = artifact(jobs.items[0]).job_id;
+          await loadJobPanels();
+        }
+      } catch (err) {
+        $("metrics").textContent = "Unable to load cockpit.";
+        $("error").textContent = err.message;
+      }
+    }
+    async function loadJobPanels() {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try {
+        const [schedule, costs, profitability, invoices, portal] = await Promise.all([
+          api(`/renovation/jobs/${jobId}/schedule`),
+          api(`/renovation/jobs/${jobId}/costs`),
+          api(`/renovation/jobs/${jobId}/profitability`).catch((err) => ({error: err.message})),
+          api(`/renovation/jobs/${jobId}/invoices`),
+          api(`/renovation/jobs/${jobId}/portal`).catch((err) => ({error: err.message})),
+        ]);
+        $("schedule-view").textContent = JSON.stringify(schedule, null, 2);
+        $("profitability").textContent = JSON.stringify({costs, profitability}, null, 2);
+        $("job-portal").textContent = JSON.stringify(portal, null, 2);
+        $("invoice-select").innerHTML = invoices.items.map((record) => {
+          const item = artifact(record);
+          return `<option value="${item.invoice_id}">${item.invoice_id} (${money(item.outstanding_balance)})</option>`;
+        }).join("");
+      } catch (err) {
+        $("error").textContent = err.message;
+      }
+    }
+    function renderRun(run) {
+      selectedRunId = run.run_id;
+      $("status").textContent = run.status;
+      $("run-id").textContent = run.run_id;
+      $("balance").textContent = run.steps?.invoice_payment?.output?.invoice
+        ? `$${Number(run.steps.invoice_payment.output.invoice.outstanding_balance).toFixed(2)}`
+        : "-";
+      $("margin").textContent = run.financial_summary?.actual_margin_percentage !== undefined
+        ? `${Number(run.financial_summary.actual_margin_percentage).toFixed(2)}%`
+        : "-";
+      $("financial").textContent = JSON.stringify(run.financial_summary || {}, null, 2);
+      $("portal").textContent = JSON.stringify({portal: run.portal || {}, customer_status: run.customer_status || {}}, null, 2);
+      $("raw").textContent = JSON.stringify(run, null, 2);
+      const steps = run.steps || {};
+      $("timeline").innerHTML = Object.keys(steps).map((name) => {
+        const status = steps[name].status || "pending";
+        return `<div class="step ${status}"><strong>${name}</strong><span>${status}</span></div>`;
+      }).join("");
+    }
+    async function refreshRuns() {
+      try {
+        const data = await api("/renovation/mvp/runs");
+        if (!data.items.length) {
+          $("runs").innerHTML = `<tr><td colspan="4" class="empty">No MVP runs yet.</td></tr>`;
+          return;
+        }
+        $("runs").innerHTML = data.items.map((run) => `
+          <tr data-run-id="${run.run_id}">
+            <td>${run.run_id}</td>
+            <td>${run.status}</td>
+            <td>${run.entity_ids?.job_id || "-"}</td>
+            <td>${run.failed_step || "-"}</td>
+          </tr>`).join("");
+        document.querySelectorAll("tr[data-run-id]").forEach((row) => {
+          row.addEventListener("click", async () => renderRun(await api(`/renovation/mvp/runs/${row.dataset.runId}`)));
+        });
+      } catch (err) {
+        $("error").textContent = err.message;
+      }
+    }
+    async function createRun(payload) {
+      $("status").textContent = "Running";
+      const run = await api("/renovation/mvp/runs", {method: "POST", body: JSON.stringify(payload)});
+      renderRun(run);
+      await refreshRuns();
+      await loadCockpit();
+    }
+    $("run-demo").addEventListener("click", async () => {
+      try { await createRun($("idempotency").value.trim() ? {idempotency_key: $("idempotency").value.trim()} : {}); }
+      catch (err) { $("status").textContent = "Error"; $("error").textContent = err.message; }
+    });
+    $("run-custom").addEventListener("click", async () => {
+      try { await createRun(customPayload()); }
+      catch (err) { $("status").textContent = "Error"; $("error").textContent = err.message; }
+    });
+    $("replay").addEventListener("click", async () => {
+      if (!selectedRunId) return;
+      try { renderRun(await api(`/renovation/mvp/runs/${selectedRunId}/replay`, {method: "POST", body: "{}"})); await refreshRuns(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("resume").addEventListener("click", async () => {
+      if (!selectedRunId) return;
+      try { renderRun(await api(`/renovation/mvp/runs/${selectedRunId}/resume`, {method: "POST", body: "{}"})); await refreshRuns(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("refresh").addEventListener("click", async () => {
+      await loadCockpit();
+      await refreshRuns();
+    });
+    $("job-select").addEventListener("change", loadJobPanels);
+    $("create-lead").addEventListener("click", async () => {
+      try { await api("/renovation/leads", {method: "POST", body: $("lead-json").value}); await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-estimate").addEventListener("click", async () => {
+      try { await api("/renovation/estimates", {method: "POST", body: $("estimate-json").value}); await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("update-status").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try {
+        await api(`/renovation/jobs/${jobId}/status`, {method: "PATCH", body: JSON.stringify({status: $("job-status").value})});
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-schedule").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/schedule`, {method: "POST", body: $("schedule-json").value}); await loadJobPanels(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-cost").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try {
+        await api(`/renovation/jobs/${jobId}/costs`, {method: "POST", body: JSON.stringify({
+          cost_date: "2026-07-10",
+          category: "overhead",
+          description: "Manual cockpit cost",
+          amount: Number(JSON.parse($("finance-json").value).amount || 0)
+        })});
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-invoice").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/invoices`, {method: "POST", body: $("finance-json").value}); await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("record-payment").addEventListener("click", async () => {
+      const invoiceId = $("invoice-select").value;
+      if (!invoiceId) return;
+      try { await api(`/renovation/invoices/${invoiceId}/payments`, {method: "POST", body: $("payment-json").value}); await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    loadCockpit();
+    refreshRuns();
+  </script>
+</body>
+</html>"""
+
+
+def _renovation_app_html() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RenovationOS Cockpit</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202833;
+      --muted: #657282;
+      --line: #d9e0e8;
+      --panel: #ffffff;
+      --panel-soft: #fbfcfd;
+      --page: #f5f7f9;
+      --accent: #176e5f;
+      --accent-strong: #105044;
+      --soft: #e7f3f0;
+      --info: #245b9a;
+      --good: #14784f;
+      --warn: #a35412;
+      --bad: #b42318;
+      --shadow: 0 8px 24px rgba(32, 40, 51, .07);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(10px);
+    }
+    h1 { margin: 0; font-size: 21px; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    h3 { margin: 14px 0 8px; font-size: 13px; color: var(--muted); }
+    .subhead { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: var(--muted);
+      background: #f7f9fb;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .status-pill.connected {
+      border-color: #9dcbbd;
+      color: var(--accent-strong);
+      background: var(--soft);
+    }
+    main { display: grid; grid-template-columns: 316px minmax(0, 1fr); min-height: calc(100vh - 61px); }
+    aside {
+      padding: 20px;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+    section { padding: 22px; }
+    nav { display: grid; gap: 8px; margin: 18px 0; }
+    nav a {
+      color: var(--ink);
+      text-decoration: none;
+      padding: 9px 11px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      border-left: 3px solid transparent;
+      font-size: 13px;
+    }
+    nav a:hover { background: var(--soft); border-color: var(--line); border-left-color: var(--accent); }
+    label { display: block; margin: 12px 0 6px; color: var(--muted); font-size: 13px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 11px;
+      font: inherit;
+      background: white;
+      color: var(--ink);
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: 2px solid rgba(23, 110, 95, .2);
+      border-color: #8abfaf;
+    }
+    textarea { min-height: 78px; resize: vertical; }
+    button {
+      margin-top: 14px;
+      border: 0;
+      border-radius: 6px;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 650;
+      color: white;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-strong); }
+    button:disabled { cursor: wait; opacity: .65; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .button-row button { width: 100%; }
+    .secondary { background: #3f4f5f; }
+    .secondary:hover { background: #2f3d4a; }
+    .quiet { background: #edf2f5; color: var(--ink); }
+    .quiet:hover { background: #dfe8ee; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+    .full { grid-column: 1 / -1; }
+    .section-title {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 14px;
+    }
+    .section-title h2 { margin: 0; font-size: 18px; }
+    .section-title span { color: var(--muted); font-size: 12px; }
+    .metric, .panel, .notice {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .panel { margin: 14px 0 0; scroll-margin-top: 82px; }
+    .panel h2 {
+      display: flex;
+      align-items: center;
+      min-height: 24px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .tool-panel { min-height: 100%; }
+    .metric {
+      position: relative;
+      min-height: 88px;
+      border-top: 4px solid var(--accent);
+    }
+    .metric:nth-child(2) { border-top-color: var(--info); }
+    .metric:nth-child(3) { border-top-color: var(--good); }
+    .metric:nth-child(4) { border-top-color: var(--warn); }
+    .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .metric strong { display: block; font-size: 20px; overflow-wrap: anywhere; line-height: 1.2; }
+    .notice { color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .notice strong { color: var(--ink); display: block; margin-bottom: 4px; }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 12px 0 0; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 9px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; background: var(--panel-soft); }
+    tbody tr:last-child td { border-bottom: 0; }
+    tr[data-run-id], tr[data-job-id] { cursor: pointer; }
+    tbody tr:hover { background: #f9fbfc; }
+    tr[data-run-id]:hover, tr[data-job-id]:hover { background: var(--soft); }
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #eef2f6;
+      color: #384454;
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: capitalize;
+    }
+    .badge.good { background: #e5f5ec; color: var(--good); }
+    .badge.warn { background: #fff4df; color: var(--warn); }
+    .badge.bad { background: #fff0ee; color: var(--bad); }
+    .timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .step { border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fbfcfd; }
+    .step strong { display: block; font-size: 12px; overflow-wrap: anywhere; text-transform: capitalize; }
+    .step span { color: var(--muted); font-size: 12px; }
+    .completed { border-color: #8abfaf; background: #eef8f4; }
+    .failed { border-color: #e09a91; background: #fff1ef; }
+    .running { border-color: #d8ad5b; background: #fff8e8; }
+    .summary-list { display: grid; gap: 7px; font-size: 13px; }
+    .summary-line { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 0; }
+    .summary-line span { color: var(--muted); }
+    .summary-line strong { text-align: right; }
+    .empty {
+      color: var(--muted);
+      padding: 13px;
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      background: var(--panel-soft);
+    }
+    td.empty { border: 0; }
+    .error { color: var(--bad); }
+    .success { color: var(--good); }
+    @media (max-width: 900px) {
+      header { position: static; align-items: flex-start; }
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .grid, .form-grid, .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .panel { scroll-margin-top: 16px; }
+    }
+    @media (max-width: 620px) {
+      header, .section-title { flex-direction: column; align-items: flex-start; }
+      .grid, .form-grid, .timeline { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      table { min-width: 480px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>RenovationOS</h1>
+      <p class="subhead">Operator cockpit</p>
+    </div>
+    <div class="header-actions">
+      <span id="header-access" class="status-pill">Not connected</span>
+      <span class="badge">Local demo</span>
+    </div>
+  </header>
+  <main>
+    <aside>
+      <div class="notice">
+        <strong>Local access</strong>
+        <div id="access-state">Connect the local demo account to load records and take actions.</div>
+      </div>
+      <label for="bootstrap-token">Local setup key</label>
+      <input id="bootstrap-token" type="password" autocomplete="off" value="bootstrap-dev">
+      <label for="principal-id">User</label>
+      <input id="principal-id" autocomplete="off" value="owner-a">
+      <button id="connect-access">Connect Workspace</button>
+      <button id="refresh" class="secondary">Refresh Workspace</button>
+      <nav>
+        <a href="#dashboard">Dashboard</a>
+        <a href="#lead-panel">Lead Intake</a>
+        <a href="#estimate-panel">Estimate Builder</a>
+        <a href="#job-panel">Jobs & Schedule</a>
+        <a href="#finance-panel">Costs & Invoices</a>
+        <a href="#portal-panel">Customer Portal</a>
+        <a href="#files-panel">Files</a>
+        <a href="#settings-panel">Settings</a>
+        <a href="#demo-panel">Demo Runs</a>
+      </nav>
+      <label for="idempotency">Demo run name</label>
+      <input id="idempotency" autocomplete="off" placeholder="kitchen-demo-001">
+      <div class="button-row">
+        <button id="run-demo">Run Sample Job</button>
+        <button id="resume" class="secondary">Resume Run</button>
+      </div>
+      <button id="replay" class="quiet">Replay Selected Run</button>
+      <p id="error" class="hint error"></p>
+      <p id="success" class="hint success"></p>
+    </aside>
+    <section>
+      <div class="section-title">
+        <h2>Today</h2>
+        <span id="last-updated">Not loaded</span>
+      </div>
+      <div id="dashboard" class="grid">
+        <div class="metric"><span>Total leads</span><strong id="metric-leads">-</strong></div>
+        <div class="metric"><span>Active jobs</span><strong id="metric-jobs">-</strong></div>
+        <div class="metric"><span>Invoiced revenue</span><strong id="metric-invoiced">-</strong></div>
+        <div class="metric"><span>Outstanding</span><strong id="metric-outstanding">-</strong></div>
+      </div>
+      <div class="panel">
+        <h2>Dashboard Summary</h2>
+        <div id="metrics" class="summary-list"><div class="empty">Connect the local workspace to load dashboard metrics.</div></div>
+      </div>
+      <div class="grid">
+        <div id="lead-panel" class="panel tool-panel">
+          <h2>Lead Intake</h2>
+          <label for="lead-name">Customer name</label>
+          <input id="lead-name" value="Morgan Homeowner">
+          <label for="lead-email">Email</label>
+          <input id="lead-email" value="morgan@example.com">
+          <label for="lead-phone">Phone</label>
+          <input id="lead-phone" value="555-0140">
+          <label for="lead-address">Property address</label>
+          <input id="lead-address" value="200 Oak Street">
+          <label for="lead-project">Project type</label>
+          <select id="lead-project">
+            <option value="kitchen_remodel">Kitchen remodel</option>
+            <option value="bathroom_remodel">Bathroom remodel</option>
+            <option value="basement_finish">Basement finish</option>
+            <option value="whole_home">Whole home</option>
+          </select>
+          <label for="lead-description">Project notes</label>
+          <textarea id="lead-description">Replace cabinets, counters, and flooring.</textarea>
+          <button id="create-lead">Create Lead</button>
+        </div>
+        <div id="estimate-panel" class="panel tool-panel">
+          <h2>Estimate Builder</h2>
+          <label for="estimate-title">Project name</label>
+          <input id="estimate-title" value="Kitchen Remodel">
+          <label for="room-name">Room</label>
+          <input id="room-name" value="Kitchen">
+          <div class="form-grid">
+            <div><label for="room-length">Length ft</label><input id="room-length" type="number" value="20"></div>
+            <div><label for="room-width">Width ft</label><input id="room-width" type="number" value="15"></div>
+            <div><label for="cabinet-count">Cabinets</label><input id="cabinet-count" type="number" value="10"></div>
+            <div><label for="flooring-sqft">Flooring sqft</label><input id="flooring-sqft" type="number" value="300"></div>
+            <div><label for="labor-rate">Labor rate</label><input id="labor-rate" type="number" value="65"></div>
+            <div><label for="tax-rate">Tax %</label><input id="tax-rate" type="number" value="6"></div>
+          </div>
+          <label for="scope-description">Scope</label>
+          <textarea id="scope-description">Cabinet replacement
+Flooring replacement</textarea>
+          <button id="create-estimate">Create Estimate</button>
+        </div>
+        <div id="job-panel" class="panel tool-panel">
+          <h2>Job Action</h2>
+          <label for="job-select">Selected job</label>
+          <select id="job-select"></select>
+          <label for="job-status">Status</label>
+          <select id="job-status">
+            <option value="planned">Planned</option>
+            <option value="active">Active</option>
+            <option value="on_hold">On hold</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button id="update-status">Update Status</button>
+        </div>
+        <div id="finance-panel" class="panel tool-panel">
+          <h2>Cost / Invoice</h2>
+          <label for="finance-description">Description</label>
+          <input id="finance-description" value="Project deposit">
+          <label for="finance-amount">Amount</label>
+          <input id="finance-amount" type="number" value="5000">
+          <label for="finance-date">Date</label>
+          <input id="finance-date" type="date" value="2026-07-01">
+          <label for="finance-due">Invoice due date</label>
+          <input id="finance-due" type="date" value="2026-07-15">
+          <div class="button-row">
+            <button id="create-cost" class="secondary">Record Cost</button>
+            <button id="create-invoice">Create Invoice</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Customer List</h2>
+        <div class="table-wrap"><table><thead><tr><th>Customer</th><th>Email</th><th>Phone</th></tr></thead><tbody id="customers"><tr><td colspan="3" class="empty">Connect workspace to load customers.</td></tr></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Lead Pipeline</h2>
+        <div class="table-wrap"><table><thead><tr><th>Lead</th><th>Status</th><th>Project</th><th>Next action</th></tr></thead><tbody id="lead-table"><tr><td colspan="4" class="empty">Create a lead or run the sample job.</td></tr></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Proposal View</h2>
+        <div class="table-wrap"><table><thead><tr><th>Proposal</th><th>Status</th><th>Customer</th><th>Total</th><th>Actions</th></tr></thead><tbody id="proposals"><tr><td colspan="5" class="empty">Approved estimates and proposals will appear here.</td></tr></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Job Board</h2>
+        <div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th>Project</th><th>Customer</th></tr></thead><tbody id="job-table"><tr><td colspan="4" class="empty">Accepted proposals become jobs.</td></tr></tbody></table></div>
+      </div>
+      <div id="files-panel" class="panel">
+        <h2>Files</h2>
+        <div class="form-grid">
+          <div>
+            <label for="file-entity-type">Record type</label>
+            <select id="file-entity-type">
+              <option value="customer">Customer</option>
+              <option value="lead">Lead</option>
+              <option value="estimate">Estimate</option>
+              <option value="proposal">Proposal</option>
+              <option value="job">Job</option>
+              <option value="invoice">Invoice</option>
+              <option value="payment">Payment</option>
+            </select>
+          </div>
+          <div><label for="file-entity-id">Record ID</label><input id="file-entity-id" placeholder="Paste record ID"></div>
+          <div class="full"><label for="file-upload">Attachment</label><input id="file-upload" type="file"></div>
+        </div>
+        <button id="upload-file">Upload File</button>
+        <div class="table-wrap"><table><thead><tr><th>File</th><th>Record</th><th>Size</th><th>Actions</th></tr></thead><tbody id="files"><tr><td colspan="4" class="empty">No files loaded.</td></tr></tbody></table></div>
+      </div>
+      <div id="settings-panel" class="panel">
+        <h2>Settings</h2>
+        <div id="account-context" class="summary-list"><div class="empty">Connect workspace to see account permissions.</div></div>
+        <div class="form-grid">
+          <div><label for="company-name">Company name</label><input id="company-name" value="RenovationOS Demo Co."></div>
+          <div><label for="company-email">Company email</label><input id="company-email" value="office@example.com"></div>
+          <div><label for="account-id">Account ID</label><input id="account-id" value="operator-a"></div>
+          <div>
+            <label for="account-role">Role</label>
+            <select id="account-role">
+              <option value="operator">Operator</option>
+              <option value="viewer">Viewer</option>
+              <option value="owner">Owner</option>
+            </select>
+          </div>
+        </div>
+        <button id="save-company">Save Branding</button>
+        <button id="assign-role" class="secondary">Assign Role</button>
+        <div class="table-wrap"><table><thead><tr><th>Account</th><th>Role</th><th>Status</th></tr></thead><tbody id="accounts"><tr><td colspan="3" class="empty">No accounts loaded.</td></tr></tbody></table></div>
+        <h3>Integrations</h3>
+        <div class="notice">
+          <strong>Local-safe provider mode</strong>
+          Email, SMS, calendar, and payment providers use deterministic shells unless live provider credentials are configured.
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Provider</th><th>Mode</th><th>Status</th><th>Required setup</th><th>Last error</th><th>Action</th></tr></thead><tbody id="integrations"><tr><td colspan="6" class="empty">No integration status loaded.</td></tr></tbody></table></div>
+        <div id="integration-result" class="summary-list"><div class="empty">Validation results will appear here.</div></div>
+        <h3>Notification History</h3>
+        <div class="table-wrap"><table><thead><tr><th>Event</th><th>Channel</th><th>Status</th></tr></thead><tbody id="notifications"><tr><td colspan="3" class="empty">No notifications loaded.</td></tr></tbody></table></div>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <h2>Schedule View</h2>
+          <label for="schedule-date">Start date</label>
+          <input id="schedule-date" type="date" value="2026-07-06">
+          <button id="create-schedule">Add Schedule</button>
+          <button id="sync-calendar" class="secondary">Sync Calendar</button>
+          <div id="schedule-view" class="summary-list"><div class="empty">Select a job to see schedule items.</div></div>
+          <div id="calendar-status" class="summary-list"><div class="empty">No calendar sync yet.</div></div>
+        </div>
+        <div class="panel">
+          <h2>Cost / Profitability</h2>
+          <div id="profitability" class="summary-list"><div class="empty">Select a job to see costs and margin.</div></div>
+        </div>
+        <div class="panel">
+          <h2>Invoice / Payment</h2>
+          <label for="invoice-select">Invoice</label>
+          <select id="invoice-select"></select>
+          <label for="payment-amount">Payment amount</label>
+          <input id="payment-amount" type="number" value="1000">
+          <label for="payment-date">Payment date</label>
+          <input id="payment-date" type="date" value="2026-07-05">
+          <label for="payment-method">Method</label>
+          <select id="payment-method">
+            <option value="ach">ACH</option>
+            <option value="card">Card</option>
+            <option value="check">Check</option>
+            <option value="cash">Cash</option>
+          </select>
+          <button id="record-payment">Record Payment</button>
+          <button id="create-payment-link" class="secondary">Create Payment Link</button>
+          <button id="invoice-pdf" class="quiet">Invoice PDF</button>
+        </div>
+        <div id="portal-panel" class="panel">
+          <h2>Customer Portal Preview</h2>
+          <div id="job-portal" class="summary-list"><div class="empty">Select a job to preview customer-facing status.</div></div>
+        </div>
+      </div>
+      <div id="demo-panel" class="grid">
+        <div class="metric"><span>MVP status</span><strong id="status">Idle</strong></div>
+        <div class="metric"><span>MVP run</span><strong id="run-id">-</strong></div>
+        <div class="metric"><span>Invoice balance</span><strong id="balance">-</strong></div>
+        <div class="metric"><span>Margin</span><strong id="margin">-</strong></div>
+      </div>
+      <div class="panel">
+        <h2>MVP Runs / Replay / Resume</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Run</th><th>Status</th><th>Job</th><th>Failed Step</th></tr></thead>
+          <tbody id="runs"><tr><td colspan="4" class="empty">No runs loaded.</td></tr></tbody>
+        </table></div>
+      </div>
+      <div class="panel">
+        <h2>Workflow Timeline</h2>
+        <div id="timeline" class="timeline"><div class="empty">Select or create a run.</div></div>
+      </div>
+      <div class="panel">
+        <h2>Financial Summary</h2>
+        <div id="financial" class="summary-list"><div class="empty">Run a sample job to see revenue, cost, and margin.</div></div>
+      </div>
+      <div class="panel">
+        <h2>Run Notes</h2>
+        <div id="run-notes" class="summary-list"><div class="empty">Selected run details will appear as plain-language notes.</div></div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let accessToken = "";
+    let selectedRunId = "";
+
+    function headers() {
+      return {"Content-Type": "application/json", ...(accessToken ? {"Authorization": `Bearer ${accessToken}`} : {})};
+    }
+    async function api(path, options = {}) {
+      $("error").textContent = "";
+      $("success").textContent = "";
+      const response = await fetch(path, {...options, headers: {...headers(), ...(options.headers || {})}});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(readableError(data, response.status));
+      return data;
+    }
+    function readableError(data, status) {
+      if (status === 401) return "Connect the local workspace before loading or changing records.";
+      if (status === 403) return "This user can view records but cannot make that change.";
+      if (status === 404) return "That record was not found. Refresh the workspace and try again.";
+      return data?.error?.message || data?.detail || "Something went wrong.";
+    }
+    function money(value) { return `$${Number(value || 0).toFixed(2)}`; }
+    function pct(value) { return `${Number(value || 0).toFixed(1)}%`; }
+    function artifact(record) { return record?.artifact || record || {}; }
+    function selectedJobId() { return $("job-select").value; }
+    function line(label, value) {
+      return `<div class="summary-line"><span>${label}</span><strong>${value ?? "-"}</strong></div>`;
+    }
+    function tableEmpty(id, cols, text) {
+      $(id).innerHTML = `<tr><td colspan="${cols}" class="empty">${text}</td></tr>`;
+    }
+    function statusBadge(status) {
+      const normalized = String(status || "unknown");
+      const good = ["completed", "paid", "accepted", "approved", "won"];
+      const warn = ["planned", "active", "new", "contacted", "sent", "partial"];
+      const cls = good.includes(normalized) ? "good" : warn.includes(normalized) ? "warn" : "";
+      return `<span class="badge ${cls}">${normalized.replaceAll("_", " ")}</span>`;
+    }
+    async function connectAccess() {
+      const bootstrap = $("bootstrap-token").value.trim();
+      const principal = $("principal-id").value.trim() || "owner-a";
+      $("access-state").textContent = "Connecting...";
+      try {
+        let issued = await fetch("/auth/token/issue", {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": bootstrap},
+          body: JSON.stringify({principal_id: principal})
+        });
+        if (issued.status === 404) {
+          await fetch("/auth/principals/register", {
+            method: "POST",
+            headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": bootstrap},
+            body: JSON.stringify({principal_id: principal, tenant_id: "tenant-a", role: "owner", scopes: []})
+          });
+          issued = await fetch("/auth/token/issue", {
+            method: "POST",
+            headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": bootstrap},
+            body: JSON.stringify({principal_id: principal})
+          });
+        }
+        const token = await issued.json();
+        if (!issued.ok) throw new Error(readableError(token, issued.status));
+      accessToken = token.access_token;
+      await api("/tenants", {method: "POST", body: JSON.stringify({tenant_id: "tenant-a", organization_id: "org-a", name: "Tenant A", billing_plan: "enterprise"})}).catch(() => undefined);
+      $("access-state").textContent = `Connected as ${principal}.`;
+      $("header-access").textContent = `Connected: ${principal}`;
+      $("header-access").classList.add("connected");
+      $("success").textContent = "Workspace connected.";
+      await loadCockpit();
+      await refreshRuns();
+    } catch (err) {
+      $("access-state").textContent = "Not connected.";
+      $("header-access").textContent = "Not connected";
+      $("header-access").classList.remove("connected");
+      $("error").textContent = err.message;
+    }
+    }
+    function leadPayload() {
+      return {
+        name: $("lead-name").value,
+        email: $("lead-email").value,
+        phone: $("lead-phone").value,
+        property_address: $("lead-address").value,
+        project_type: $("lead-project").value,
+        description: $("lead-description").value,
+        created_date: new Date().toISOString().slice(0, 10),
+        source: {source_type: "website", source_name: "cockpit"}
+      };
+    }
+    function estimatePayload() {
+      const slug = $("estimate-title").value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "renovation";
+      return {
+        project_id: `project-${slug}`,
+        scope_description: $("scope-description").value,
+        rooms: [{name: $("room-name").value, length_ft: Number($("room-length").value), width_ft: Number($("room-width").value), quantity: 1}],
+        quantities: {cabinetry: Number($("cabinet-count").value), flooring: Number($("flooring-sqft").value)},
+        labor_rate: Number($("labor-rate").value),
+        contingency_percentage: 10,
+        tax_percentage: Number($("tax-rate").value),
+        notes: $("estimate-title").value
+      };
+    }
+    function invoicePayload() {
+      return {
+        invoice_date: $("finance-date").value,
+        due_date: $("finance-due").value,
+        description: $("finance-description").value,
+        amount: Number($("finance-amount").value),
+        tax: 0
+      };
+    }
+    function costPayload() {
+      return {
+        cost_date: $("finance-date").value,
+        category: "overhead",
+        description: $("finance-description").value,
+        amount: Number($("finance-amount").value),
+        allocation_method: "direct"
+      };
+    }
+    async function loadCockpit() {
+      try {
+        $("metrics").innerHTML = `<div class="empty">Loading dashboard...</div>`;
+        const [metrics, customers, leads, proposals, jobs, account, accounts, files, notifications, company, integrations] = await Promise.all([
+          api("/renovation/metrics"),
+          api("/renovation/customers"),
+          api("/renovation/leads"),
+          api("/renovation/proposals"),
+          api("/renovation/jobs"),
+          api("/renovation/account"),
+          api("/renovation/accounts"),
+          api("/renovation/files"),
+          api("/renovation/notifications"),
+          api("/renovation/settings/company"),
+          api("/renovation/integrations"),
+        ]);
+        $("metric-leads").textContent = metrics.total_leads;
+        $("metric-jobs").textContent = metrics.active_jobs;
+        $("metric-invoiced").textContent = money(metrics.invoiced_revenue);
+        $("metric-outstanding").textContent = money(metrics.outstanding_receivables);
+        $("last-updated").textContent = `Updated ${new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})}`;
+        $("metrics").innerHTML = [
+          line("Converted leads", `${metrics.converted_leads} of ${metrics.total_leads}`),
+          line("Completed jobs", metrics.completed_jobs),
+          line("Estimated revenue", money(metrics.estimated_revenue)),
+          line("Paid revenue", money(metrics.paid_revenue)),
+          line("Total costs", money(metrics.total_costs)),
+          line("Gross profit", money(metrics.gross_profit)),
+          line("Gross margin", pct(metrics.gross_margin_percentage)),
+          line("Jobs at risk", metrics.jobs_at_risk),
+          line("Average estimate", money(metrics.average_estimate_value)),
+          line("Average job margin", pct(metrics.average_job_margin))
+        ].join("");
+        if (!customers.items.length) tableEmpty("customers", 3, "No customers yet.");
+        else $("customers").innerHTML = customers.items.map((record) => {
+          const item = artifact(record);
+          return `<tr><td>${item.name || item.customer_id}</td><td>${item.email || "-"}</td><td>${item.phone || "-"}</td></tr>`;
+        }).join("");
+        if (!leads.items.length) tableEmpty("lead-table", 4, "No leads yet. Create one from Lead Intake.");
+        else $("lead-table").innerHTML = leads.items.map((record) => {
+          const item = artifact(record);
+          return `<tr><td>${item.name || item.lead_id}</td><td>${statusBadge(item.status)}</td><td>${String(item.project_type || "-").replaceAll("_", " ")}</td><td>${item.customer_id ? "Converted to customer" : "Follow up"}</td></tr>`;
+        }).join("");
+        if (!proposals.items.length) tableEmpty("proposals", 5, "No proposals yet.");
+        else $("proposals").innerHTML = proposals.items.map((record) => {
+          const item = artifact(record);
+          const customer = item.customer || {};
+          const estimate = item.estimate || {};
+          return `<tr><td>${item.proposal_id}</td><td>${statusBadge(record.status || item.status)}</td><td>${customer.name || customer.customer_id || "-"}</td><td>${money(estimate.total)}</td><td><button class="quiet proposal-pdf" data-proposal-id="${item.proposal_id}">PDF</button></td></tr>`;
+        }).join("");
+        if (!jobs.items.length) {
+          tableEmpty("job-table", 4, "No jobs yet. Run a sample job to populate this board.");
+          $("job-select").innerHTML = `<option value="">No jobs yet</option>`;
+        } else {
+          $("job-table").innerHTML = jobs.items.map((record) => {
+            const item = artifact(record);
+            return `<tr data-job-id="${item.job_id}"><td>${item.title || item.job_id}</td><td>${statusBadge(item.status)}</td><td>${item.project_id || "-"}</td><td>${item.customer_id || "-"}</td></tr>`;
+          }).join("");
+          $("job-select").innerHTML = jobs.items.map((record) => {
+            const item = artifact(record);
+            return `<option value="${item.job_id}">${item.title || item.job_id}</option>`;
+          }).join("");
+          document.querySelectorAll("tr[data-job-id]").forEach((row) => {
+            row.addEventListener("click", async () => {
+              $("job-select").value = row.dataset.jobId;
+              await loadJobPanels();
+            });
+          });
+          await loadJobPanels();
+        }
+        $("account-context").innerHTML = [
+          line("Tenant", account.tenant_id),
+          line("User", account.principal_id),
+          line("Role", account.role),
+          line("Can operate", account.permissions?.can_operate ? "Yes" : "No")
+        ].join("");
+        if (!accounts.items.length) tableEmpty("accounts", 3, "No accounts assigned yet.");
+        else $("accounts").innerHTML = accounts.items.map((record) => {
+          const item = artifact(record);
+          return `<tr><td>${item.account_id}</td><td>${statusBadge(item.role)}</td><td>${item.status || "active"}</td></tr>`;
+        }).join("");
+        renderFiles(files.items || []);
+        renderNotifications(notifications.items || []);
+        renderIntegrations(integrations.items || []);
+        $("company-name").value = company.artifact?.company_name || "";
+        $("company-email").value = company.artifact?.email || "";
+      } catch (err) {
+        $("metrics").innerHTML = `<div class="empty">Connect the local workspace to load metrics.</div>`;
+        $("error").textContent = err.message;
+      }
+    }
+    function renderFiles(items) {
+      if (!items.length) {
+        tableEmpty("files", 4, "No files uploaded yet.");
+        return;
+      }
+      $("files").innerHTML = items.map((record) => {
+        const item = artifact(record);
+        return `<tr><td>${item.filename}</td><td>${item.entity_type} / ${item.entity_id}</td><td>${item.size_bytes} bytes</td><td><button class="quiet file-download" data-file-id="${item.attachment_id}">Download</button><button class="secondary file-delete" data-file-id="${item.attachment_id}">Archive</button></td></tr>`;
+      }).join("");
+    }
+    function renderNotifications(items) {
+      if (!items.length) {
+        tableEmpty("notifications", 3, "No notifications sent yet.");
+        return;
+      }
+      $("notifications").innerHTML = items.map((record) => {
+        const item = artifact(record);
+        const payload = item.payload || {};
+        return `<tr><td>${payload.event_type || "-"}</td><td>${payload.channel || "-"}</td><td>${statusBadge(item.status)}</td></tr>`;
+      }).join("");
+    }
+    function renderIntegrations(items) {
+      if (!items.length) {
+        tableEmpty("integrations", 6, "No integration status loaded.");
+        return;
+      }
+      $("integrations").innerHTML = items.map((item) => {
+        const mode = item.stub_mode ? "Local / stub" : "Configured";
+        const status = item.valid ? (item.status || "ready") : "needs setup";
+        const checklist = (item.checklist || []).map((entry) => `${entry.configured ? "Ready" : "Missing"}: ${entry.label}${entry.optional ? " (optional)" : ""}`).join("<br>");
+        const provider = item.provider_type === "email" ? "smtp" : item.provider_type === "sms" ? "twilio" : item.provider_type === "payment" ? "stripe" : "google";
+        const validateType = item.provider_type === "email" || item.provider_type === "sms" ? "notification" : item.provider_type;
+        return `<tr data-provider-type="${item.provider_type}" data-validate-type="${validateType}" data-provider="${provider}"><td><strong>${item.provider_type}</strong><div class="hint">${item.setup_instructions || ""}</div></td><td>${mode}</td><td>${statusBadge(status)}</td><td>${checklist || "-"}</td><td>${item.last_error || "-"}</td><td><button class="quiet validate-provider">Validate</button></td></tr>`;
+      }).join("");
+    }
+    async function loadJobPanels() {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try {
+        const [schedule, costs, profitability, invoices, portal] = await Promise.all([
+          api(`/renovation/jobs/${jobId}/schedule`),
+          api(`/renovation/jobs/${jobId}/costs`),
+          api(`/renovation/jobs/${jobId}/profitability`).catch((err) => ({error: err.message})),
+          api(`/renovation/jobs/${jobId}/invoices`),
+          api(`/renovation/jobs/${jobId}/portal`).catch((err) => ({error: err.message})),
+        ]);
+        $("schedule-view").innerHTML = schedule.items?.length
+          ? schedule.items.map((record) => {
+              const item = artifact(record);
+              return line(item.start_date || "Schedule", item.status || item.schedule_id);
+            }).join("")
+          : `<div class="empty">No schedule yet. Choose a start date and add one.</div>`;
+        $("profitability").innerHTML = [
+          line("Recorded costs", costs.total || 0),
+          line("Estimate margin", profitability.error ? "Not ready" : pct(profitability.estimated_margin_percentage)),
+          line("Actual margin", profitability.error ? "Not ready" : pct(profitability.actual_margin_percentage)),
+          line("Status", profitability.error ? "Add costs and invoices to calculate" : "Current")
+        ].join("");
+        $("job-portal").innerHTML = portal.error
+          ? `<div class="empty">Portal preview is not ready for this job yet.</div>`
+          : [
+              line("Project status", portal.project_status),
+              line("Last update", portal.generated_date),
+              line("Customer-safe summary", portal.summary || "Available")
+            ].join("");
+        $("invoice-select").innerHTML = invoices.items.length ? invoices.items.map((record) => {
+          const item = artifact(record);
+          return `<option value="${item.invoice_id}">${item.description || item.invoice_id} - ${money(item.outstanding_balance)} due</option>`;
+        }).join("") : `<option value="">No invoices yet</option>`;
+        $("calendar-status").innerHTML = `<div class="empty">Use Sync Calendar after adding schedule items.</div>`;
+      } catch (err) {
+        $("error").textContent = err.message;
+      }
+    }
+    function renderRun(run) {
+      selectedRunId = run.run_id;
+      $("status").textContent = run.status;
+      $("run-id").textContent = run.run_id;
+      $("balance").textContent = run.steps?.invoice_payment?.output?.invoice ? money(run.steps.invoice_payment.output.invoice.outstanding_balance) : "-";
+      $("margin").textContent = run.financial_summary?.actual_margin_percentage !== undefined ? pct(run.financial_summary.actual_margin_percentage) : "-";
+      const financial = run.financial_summary || {};
+      $("financial").innerHTML = [
+        line("Contract value", money(financial.contract_value)),
+        line("Actual costs", money(financial.actual_costs)),
+        line("Actual margin", pct(financial.actual_margin_percentage)),
+        line("Receivables", money(financial.receivables)),
+        line("Payables", money(financial.payables))
+      ].join("");
+      $("run-notes").innerHTML = [
+        line("Run", run.run_id),
+        line("Status", run.status),
+        line("Job", run.entity_ids?.job_id || "-"),
+        line("Customer portal", run.portal?.view_hash ? "Ready" : "Not ready")
+      ].join("");
+      const steps = run.steps || {};
+      $("timeline").innerHTML = Object.keys(steps).map((name) => {
+        const status = steps[name].status || "pending";
+        return `<div class="step ${status}"><strong>${name.replaceAll("_", " ")}</strong><span>${status}</span></div>`;
+      }).join("");
+    }
+    async function refreshRuns() {
+      try {
+        const data = await api("/renovation/mvp/runs");
+        if (!data.items.length) {
+          tableEmpty("runs", 4, "No MVP runs yet.");
+          return;
+        }
+        $("runs").innerHTML = data.items.map((run) => `
+          <tr data-run-id="${run.run_id}">
+            <td>${run.run_id}</td>
+            <td>${statusBadge(run.status)}</td>
+            <td>${run.entity_ids?.job_id || "-"}</td>
+            <td>${run.failed_step || "-"}</td>
+          </tr>`).join("");
+        document.querySelectorAll("tr[data-run-id]").forEach((row) => {
+          row.addEventListener("click", async () => renderRun(await api(`/renovation/mvp/runs/${row.dataset.runId}`)));
+        });
+      } catch (err) {
+        $("error").textContent = err.message;
+      }
+    }
+    async function createRun(payload) {
+      $("status").textContent = "Running";
+      const run = await api("/renovation/mvp/runs", {method: "POST", body: JSON.stringify(payload)});
+      renderRun(run);
+      await refreshRuns();
+      await loadCockpit();
+    }
+    $("connect-access").addEventListener("click", connectAccess);
+    $("refresh").addEventListener("click", async () => { await loadCockpit(); await refreshRuns(); });
+    $("run-demo").addEventListener("click", async () => {
+      try { await createRun($("idempotency").value.trim() ? {idempotency_key: $("idempotency").value.trim()} : {}); }
+      catch (err) { $("status").textContent = "Error"; $("error").textContent = err.message; }
+    });
+    $("replay").addEventListener("click", async () => {
+      if (!selectedRunId) return;
+      try { renderRun(await api(`/renovation/mvp/runs/${selectedRunId}/replay`, {method: "POST", body: "{}"})); await refreshRuns(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("resume").addEventListener("click", async () => {
+      if (!selectedRunId) return;
+      try { renderRun(await api(`/renovation/mvp/runs/${selectedRunId}/resume`, {method: "POST", body: "{}"})); await refreshRuns(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("job-select").addEventListener("change", loadJobPanels);
+    $("create-lead").addEventListener("click", async () => {
+      try { await api("/renovation/leads", {method: "POST", body: JSON.stringify(leadPayload())}); $("success").textContent = "Lead created."; await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-estimate").addEventListener("click", async () => {
+      try { await api("/renovation/estimates", {method: "POST", body: JSON.stringify(estimatePayload())}); $("success").textContent = "Estimate created."; await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("update-status").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/status`, {method: "PATCH", body: JSON.stringify({status: $("job-status").value})}); $("success").textContent = "Job status updated."; await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-schedule").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/schedule`, {method: "POST", body: JSON.stringify({start_date: $("schedule-date").value})}); $("success").textContent = "Schedule added."; await loadJobPanels(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-cost").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/costs`, {method: "POST", body: JSON.stringify(costPayload())}); $("success").textContent = "Cost recorded."; await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-invoice").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try { await api(`/renovation/jobs/${jobId}/invoices`, {method: "POST", body: JSON.stringify(invoicePayload())}); $("success").textContent = "Invoice created."; await loadCockpit(); }
+      catch (err) { $("error").textContent = err.message; }
+    });
+    $("record-payment").addEventListener("click", async () => {
+      const invoiceId = $("invoice-select").value;
+      if (!invoiceId) return;
+      try {
+        await api(`/renovation/invoices/${invoiceId}/payments`, {method: "POST", body: JSON.stringify({payment_date: $("payment-date").value, amount: Number($("payment-amount").value), method: $("payment-method").value})});
+        $("success").textContent = "Payment recorded.";
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("create-payment-link").addEventListener("click", async () => {
+      const invoiceId = $("invoice-select").value;
+      if (!invoiceId) return;
+      try {
+        const link = await api(`/renovation/invoices/${invoiceId}/payment-link`, {method: "POST", body: JSON.stringify({idempotency_key: invoiceId})});
+        $("success").textContent = `Payment link ready: ${link.artifact?.payload?.payment_url || "created"}`;
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("invoice-pdf").addEventListener("click", () => {
+      const invoiceId = $("invoice-select").value;
+      if (!invoiceId || !accessToken) return;
+      downloadWithAuth(`/renovation/invoices/${invoiceId}/pdf`, `${invoiceId}.pdf`);
+    });
+    $("upload-file").addEventListener("click", async () => {
+      const file = $("file-upload").files[0];
+      const entityId = $("file-entity-id").value.trim();
+      if (!file || !entityId) return;
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const response = await fetch(`/renovation/files/${$("file-entity-type").value}/${entityId}`, {
+          method: "POST",
+          headers: accessToken ? {"Authorization": `Bearer ${accessToken}`} : {},
+          body: form
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(readableError(data, response.status));
+        $("success").textContent = "File uploaded.";
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("assign-role").addEventListener("click", async () => {
+      try {
+        await api("/renovation/accounts/roles", {method: "POST", body: JSON.stringify({account_id: $("account-id").value.trim(), principal_id: $("account-id").value.trim(), role: $("account-role").value})});
+        $("success").textContent = "Role assigned.";
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("save-company").addEventListener("click", async () => {
+      try {
+        await api("/renovation/settings/company", {method: "PATCH", body: JSON.stringify({company_name: $("company-name").value, email: $("company-email").value})});
+        $("success").textContent = "Branding saved.";
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("sync-calendar").addEventListener("click", async () => {
+      const jobId = selectedJobId();
+      if (!jobId) return;
+      try {
+        const schedule = await api(`/renovation/jobs/${jobId}/schedule`);
+        const first = schedule.items?.[0]?.artifact;
+        if (!first) return;
+        const sync = await api(`/renovation/schedule/${first.schedule_id}/sync`, {method: "POST", body: JSON.stringify({provider: "local"})});
+        $("calendar-status").innerHTML = [line("Status", sync.artifact?.status), line("External event", sync.artifact?.payload?.external_event_id || "-")].join("");
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("files").addEventListener("click", async (event) => {
+      const fileId = event.target?.dataset?.fileId;
+      if (!fileId) return;
+      if (event.target.classList.contains("file-download")) {
+        downloadWithAuth(`/renovation/files/${fileId}`, "renovation-attachment");
+        return;
+      }
+      if (event.target.classList.contains("file-delete")) {
+        try {
+          await api(`/renovation/files/${fileId}`, {method: "DELETE"});
+          $("success").textContent = "File archived.";
+          await loadCockpit();
+        } catch (err) { $("error").textContent = err.message; }
+      }
+    });
+    $("integrations").addEventListener("click", async (event) => {
+      if (!event.target.classList.contains("validate-provider")) return;
+      const row = event.target.closest("tr");
+      const providerType = row?.dataset?.providerType;
+      const validateType = row?.dataset?.validateType;
+      const provider = row?.dataset?.provider;
+      if (!providerType || !validateType || !provider) return;
+      const payload = {provider};
+      if (providerType === "email") {
+        payload.channel = "email";
+        payload.sender = $("company-email").value || "office@example.com";
+        payload.smtp_host = provider === "smtp" ? "smtp.example.com" : "";
+      }
+      if (providerType === "sms") {
+        payload.channel = "sms";
+        payload.sender_id = "RENOS";
+        payload.account_sid = "configured-locally";
+        payload.auth_token = "configured-locally";
+      }
+      try {
+        const result = await api(`/renovation/integrations/${validateType}/validate`, {method: "POST", body: JSON.stringify(payload)});
+        $("integration-result").innerHTML = [line("Provider", result.provider), line("Validation", result.valid ? "Ready" : "Needs setup"), line("Missing", (result.missing || []).join(", ") || "-")].join("");
+        await loadCockpit();
+      } catch (err) { $("error").textContent = err.message; }
+    });
+    $("proposals").addEventListener("click", (event) => {
+      const proposalId = event.target?.dataset?.proposalId;
+      if (!proposalId || !event.target.classList.contains("proposal-pdf")) return;
+      downloadWithAuth(`/renovation/proposals/${proposalId}/pdf`, `${proposalId}.pdf`);
+    });
+    async function downloadWithAuth(path, filename) {
+      try {
+        const response = await fetch(path, {headers: accessToken ? {"Authorization": `Bearer ${accessToken}`} : {}});
+        if (!response.ok) throw new Error(readableError(await response.json().catch(() => ({})), response.status));
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) { $("error").textContent = err.message; }
+    }
+    loadCockpit();
+    refreshRuns();
+  </script>
+</body>
+</html>"""
 
 
 def _mesh_passport(
@@ -264,7 +1815,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     queue_backend = choose_queue_backend(settings)
     signing_verifier = choose_signing_verifier(settings)
     payment_processor = StripePaymentProcessor(settings.stripe_api_key) if settings.stripe_api_key else MockPaymentProcessor()
-    durable_store = MemoryPersistenceStore()
+    durable_store = choose_state_store(settings)
     migration_result = MigrationRunner(durable_store).apply()
     tenant_service = TenantService(durable_store)
     membership_service = MembershipService(durable_store)
@@ -297,6 +1848,61 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         output_root=Path(settings.factory_output_root),
     )
     renovation = RenovationFoundationService(durable_store, event_store)
+    renovation_mvp = RenovationMvpWorkflow(renovation, durable_store, event_store)
+    renovation_operator = RenovationOperatorCockpit(renovation, durable_store, event_store)
+    renovation_attachments = LocalAttachmentStore(
+        settings.renovation_storage_dir,
+        durable_store,
+        max_bytes=settings.renovation_max_upload_bytes,
+    )
+
+    def _renovation_integration_statuses() -> dict[str, object]:
+        email_config = {
+            "provider": "smtp" if settings.renovation_email_provider == "smtp" else "local",
+            "channel": "email",
+            "smtp_host": settings.renovation_smtp_host,
+            "smtp_port": settings.renovation_smtp_port,
+            "sender": settings.renovation_email_sender,
+            "reply_to": settings.renovation_email_reply_to,
+            "smtp_username": settings.renovation_smtp_username,
+            "smtp_password": settings.renovation_smtp_password,
+            "live_enabled": settings.renovation_smtp_live_enabled,
+        }
+        sms_config = {
+            "provider": settings.renovation_sms_provider,
+            "channel": "sms",
+            "sender_id": settings.renovation_sms_sender_id,
+            "account_sid": settings.renovation_sms_account_sid,
+            "auth_token": settings.renovation_sms_auth_token,
+        }
+        calendar_config = {
+            "provider": settings.renovation_calendar_provider,
+            "oauth_client_id": settings.renovation_calendar_oauth_client_id,
+            "oauth_client_secret": settings.renovation_calendar_oauth_client_secret,
+        }
+        payment_config = {
+            "provider": settings.renovation_payment_provider,
+            "secret_key": settings.renovation_payment_secret_key,
+            "webhook_secret": settings.renovation_payment_webhook_secret,
+        }
+        items = [
+            {"provider_type": "email", **renovation_operator.notification_provider.validate_config(email_config)},
+            {"provider_type": "sms", **renovation_operator.notification_provider.validate_config(sms_config)},
+            {"provider_type": "calendar", **renovation_operator.calendar_provider.validate_config(calendar_config)},
+            {"provider_type": "payment", **renovation_operator.payment_provider.validate_config(payment_config)},
+        ]
+        for item in items:
+            item["stub_mode"] = item.get("mode") in {"stub", "oauth-ready-stub"} or str(item.get("provider", "")).startswith("local")
+            item["last_error"] = "" if item.get("valid") else f"Missing {', '.join(item.get('missing', []))}"
+            item.setdefault("checklist", [{"key": "local_mode", "label": "Local deterministic mode", "configured": True}])
+            item.setdefault(
+                "setup_instructions",
+                "Local mode is ready for demos. Configure a production provider and secrets before live customer use.",
+            )
+            item.setdefault("mode", "stub" if item["stub_mode"] else "configured")
+            item.setdefault("status", "local_stub" if item["stub_mode"] else "configured")
+        return {"items": items, "total": len(items)}
+
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
         event_store=event_store,
@@ -756,6 +2362,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/openapi.json",
             "/docs",
             "/redoc",
+            "/renovation/app",
         }
         if settings.metrics_public:
             unauthenticated_paths = unauthenticated_paths | {"/metrics"}
@@ -826,10 +2433,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "service": settings.app_name,
             "message": "API is running. Open /docs for interactive API documentation.",
             "docs": "/docs",
+            "renovation_mvp": "/renovation/app",
             "health": "/health",
             "ready": "/ready",
             "openapi": "/openapi.json",
         }
+
+    @app.get("/renovation/app", response_class=HTMLResponse, include_in_schema=False)
+    def renovation_app():
+        return _renovation_app_html()
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon():
@@ -2456,6 +4068,482 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except AuthorizationError as exc:
             raise HTTPException(status_code=403, detail=str(exc))
 
+    @app.post("/renovation/mvp/demo", tags=["renovation-os"])
+    def renovation_mvp_demo(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.run"])
+        try:
+            result = renovation_mvp.create_run(ctx, payload)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_mvp_workflows",
+                metadata={"run_id": result["run_id"], "job_id": dict(result["entity_ids"]).get("job_id", "")},
+            )
+            return result
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/mvp/runs", tags=["renovation-os"])
+    def renovation_mvp_run_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.run"])
+        try:
+            return renovation_mvp.create_run(ctx, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/mvp/runs", tags=["renovation-os"])
+    def renovation_mvp_runs_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.read"])
+        return renovation_mvp.list_runs(ctx)
+
+    @app.get("/renovation/mvp/runs/{run_id}", tags=["renovation-os"])
+    def renovation_mvp_run_get(run_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.read"])
+        try:
+            return renovation_mvp.get_run(ctx, run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/mvp/runs/{run_id}/replay", tags=["renovation-os"])
+    def renovation_mvp_run_replay(run_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.run"])
+        try:
+            return renovation_mvp.replay_run(ctx, run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/mvp/runs/{run_id}/resume", tags=["renovation-os"])
+    def renovation_mvp_run_resume(run_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.run"])
+        try:
+            return renovation_mvp.resume_run(ctx, run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/mvp/runs/{run_id}/portal", tags=["renovation-os"])
+    def renovation_mvp_run_portal(run_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.mvp.read"])
+        try:
+            return renovation_mvp.portal(ctx, run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/health", tags=["renovation-os"])
+    def renovation_health(request: Request):
+        require_scopes(request, ["renovation.mvp.read"])
+        return {
+            "status": "ok",
+            "state_store": durable_store.health(),
+            "mvp_runs": len(durable_store.list("renovation_mvp_runs")),
+        }
+
+    @app.get("/renovation/metrics", tags=["renovation-os"])
+    def renovation_metrics(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.metrics(ctx)
+
+    @app.get("/renovation/account", tags=["renovation-os"])
+    def renovation_account_context(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.account_context(ctx)
+
+    @app.get("/renovation/accounts", tags=["renovation-os"])
+    def renovation_accounts_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_accounts(ctx)
+
+    @app.post("/renovation/accounts/roles", tags=["renovation-os"])
+    def renovation_account_role_assign(payload: dict, request: Request, db: Session = Depends(get_db)):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            record = renovation_operator.assign_account_role(ctx, payload)
+            auth.register_principal(
+                db,
+                principal_id=str(payload.get("principal_id") or payload.get("account_id")),
+                tenant_id=ctx.tenant_id,
+                principal_type=str(payload.get("principal_type", "user")),
+                scopes=[],
+                role=str(payload["role"]),
+            )
+            return record
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/settings/company", tags=["renovation-os"])
+    def renovation_company_settings_get(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.company_profile(ctx)
+
+    @app.patch("/renovation/settings/company", tags=["renovation-os"])
+    def renovation_company_settings_update(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        return renovation_operator.update_company_profile(ctx, payload)
+
+    @app.post("/renovation/customers", tags=["renovation-os"])
+    def renovation_customer_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.create_customer(ctx, payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/customers", tags=["renovation-os"])
+    def renovation_customers_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_customers(ctx)
+
+    @app.get("/renovation/customers/{customer_id}", tags=["renovation-os"])
+    def renovation_customer_get(customer_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            return renovation_operator.get_customer(ctx, customer_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/leads", tags=["renovation-os"])
+    def renovation_leads_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_leads(ctx)
+
+    @app.get("/renovation/estimates", tags=["renovation-os"])
+    def renovation_estimates_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_estimates(ctx)
+
+    @app.post("/renovation/estimates", tags=["renovation-os"])
+    def renovation_estimates_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.create_estimate(ctx, payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/estimates/{estimate_id}", tags=["renovation-os"])
+    def renovation_estimates_get(estimate_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            return renovation_operator._artifact(ctx, "renovation_estimates", estimate_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/estimates/{estimate_id}/approve", tags=["renovation-os"])
+    def renovation_estimate_approve(estimate_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.approve_estimate(ctx, estimate_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/proposals", tags=["renovation-os"])
+    def renovation_proposals_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_proposals(ctx)
+
+    @app.post("/renovation/proposals", tags=["renovation-os"])
+    def renovation_proposals_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.create_proposal(ctx, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/proposals/{proposal_id}", tags=["renovation-os"])
+    def renovation_proposals_get(proposal_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            return renovation_operator._artifact(ctx, "renovation_proposals", proposal_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/proposals/{proposal_id}/accept", tags=["renovation-os"])
+    def renovation_proposal_accept(proposal_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.accept_proposal(ctx, proposal_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/proposals/{proposal_id}/pdf", tags=["renovation-os"])
+    def renovation_proposal_pdf(proposal_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            content, filename = renovation_operator.proposal_pdf(ctx, proposal_id)
+            return FastAPIResponse(
+                content=content,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/invoices/{invoice_id}/pdf", tags=["renovation-os"])
+    def renovation_invoice_pdf(invoice_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            content, filename = renovation_operator.invoice_pdf(ctx, invoice_id)
+            return FastAPIResponse(
+                content=content,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/renovation/jobs", tags=["renovation-os"])
+    def renovation_jobs_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_jobs(ctx)
+
+    @app.patch("/renovation/jobs/{job_id}/status", tags=["renovation-os"])
+    def renovation_job_status_update(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.update_job_status(ctx, job_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/jobs/{job_id}/schedule", tags=["renovation-os"])
+    def renovation_job_schedule_create(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.create_schedule(ctx, job_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/jobs/{job_id}/schedule", tags=["renovation-os"])
+    def renovation_job_schedules_list(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_job_schedules(ctx, job_id)
+
+    @app.get("/renovation/jobs/{job_id}/costs", tags=["renovation-os"])
+    def renovation_job_costs_list(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_costs(ctx, job_id)
+
+    @app.post("/renovation/jobs/{job_id}/invoices", tags=["renovation-os"])
+    def renovation_job_invoice_create(job_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.create_invoice(ctx, job_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/jobs/{job_id}/invoices", tags=["renovation-os"])
+    def renovation_job_invoices_list(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_invoices(ctx, job_id)
+
+    @app.post("/renovation/invoices/{invoice_id}/payments", tags=["renovation-os"])
+    def renovation_invoice_payment_create(invoice_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.record_payment(ctx, invoice_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/jobs/{job_id}/portal", tags=["renovation-os"])
+    def renovation_job_portal(job_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            return renovation_operator.portal(ctx, job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/files/{entity_type}/{entity_id}", tags=["renovation-os"])
+    async def renovation_file_upload(
+        entity_type: str,
+        entity_id: str,
+        request: Request,
+        file: UploadFile = File(...),
+    ):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            content = await file.read()
+            record = renovation_attachments.save(
+                ctx,
+                entity_type,
+                entity_id,
+                file.filename or "attachment.bin",
+                file.content_type or "application/octet-stream",
+                content,
+            )
+            return renovation_operator.record_attachment(ctx, record)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/files", tags=["renovation-os"])
+    def renovation_files_list(
+        request: Request,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        include_archived: bool = False,
+    ):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_attachments.list(ctx, entity_type, entity_id, include_archived)
+
+    @app.get("/renovation/files/{attachment_id}", tags=["renovation-os"])
+    def renovation_file_download(attachment_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        try:
+            record, content = renovation_attachments.read(ctx, attachment_id)
+            artifact = dict(record["artifact"])
+            renovation_operator.attachment_downloaded(ctx, attachment_id)
+            return FastAPIResponse(
+                content=content,
+                media_type=str(artifact.get("content_type", "application/octet-stream")),
+                headers={"Content-Disposition": f'attachment; filename="{artifact.get("filename", "attachment.bin")}"'},
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.delete("/renovation/files/{attachment_id}", tags=["renovation-os"])
+    def renovation_file_archive(attachment_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            record = renovation_attachments.archive(ctx, attachment_id)
+            return renovation_operator.attachment_archived(ctx, record)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/notifications/{event_type}", tags=["renovation-os"])
+    def renovation_notification_send(event_type: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.send_notification(ctx, event_type, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/notifications", tags=["renovation-os"])
+    def renovation_notifications_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_notifications(ctx)
+
+    @app.post("/renovation/schedule/{schedule_id}/sync", tags=["renovation-os"])
+    def renovation_schedule_sync(schedule_id: str, request: Request, payload: dict | None = None):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.sync_schedule(ctx, schedule_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/integrations/{provider_type}/validate", tags=["renovation-os"])
+    def renovation_provider_validate(provider_type: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.validate_provider(ctx, provider_type, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/integrations", tags=["renovation-os"])
+    def renovation_integrations_list(request: Request):
+        _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return _renovation_integration_statuses()
+
+    @app.post("/renovation/invoices/{invoice_id}/payment-link", tags=["renovation-os"])
+    def renovation_invoice_payment_link(invoice_id: str, request: Request, payload: dict | None = None):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.payment_link(ctx, invoice_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/renovation/invoices/{invoice_id}/payment-status", tags=["renovation-os"])
+    def renovation_invoice_payment_status(invoice_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.payment_status(
+                ctx,
+                invoice_id,
+                str(payload.get("status", "pending")),
+                str(payload.get("provider_reference_id", "")) or None,
+                str(payload.get("idempotency_key", "")) or None,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/payments/webhook", tags=["renovation-os"])
+    def renovation_payment_webhook(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.write"])
+        try:
+            return renovation_operator.payment_webhook(ctx, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
     @app.post("/renovation/estimate", tags=["renovation-os"])
     def renovation_estimate_create(payload: dict, request: Request):
         ctx = _tenant_context(request)
@@ -2535,6 +4623,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["renovation.jobs.write"])
         try:
             job = renovation.create_job(ctx, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.job.created",
+                job.job_id,
+                {"job_id": job.job_id},
+            )
+            renovation_operator._record_for("renovation_jobs", job.job_id)
             metering.record(
                 ctx.tenant_id,
                 "renovation_jobs",
@@ -2810,6 +4905,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["renovation.finance.write"])
         try:
             cost = renovation.record_job_cost(ctx, job_id, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.cost_item.created",
+                cost.cost_record_id,
+                {
+                    "job_id": job_id,
+                    "cost_record_id": cost.cost_record_id,
+                    "amount": cost.amount,
+                },
+            )
+            renovation_operator._record_for("renovation_job_costs", cost.cost_record_id)
             metering.record(
                 ctx.tenant_id,
                 "renovation_job_costs",
@@ -2842,7 +4948,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.invoicing.write"])
         try:
-            return renovation.create_invoice(ctx, payload).as_dict()
+            invoice = renovation.create_invoice(ctx, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.invoice.created",
+                invoice.invoice_id,
+                {
+                    "job_id": invoice.job_id,
+                    "invoice_id": invoice.invoice_id,
+                    "total": invoice.total,
+                },
+            )
+            renovation_operator._record_for("renovation_invoices", invoice.invoice_id)
+            return invoice.as_dict()
         except NotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except AuthorizationError as exc:
@@ -2858,7 +4976,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.invoicing.write"])
         try:
-            return renovation.pay_invoice(ctx, invoice_id, payload).as_dict()
+            invoice = renovation.pay_invoice(ctx, invoice_id, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.payment.recorded",
+                invoice_id,
+                {"invoice_id": invoice_id, "paid_amount": invoice.paid_amount},
+            )
+            renovation_operator._record_for("renovation_invoices", invoice_id)
+            return invoice.as_dict()
         except NotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
         except AuthorizationError as exc:
@@ -2922,6 +5048,227 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return renovation.owner_financial_summary(ctx, as_of)
         except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/leads", tags=["renovation-os"])
+    def renovation_lead_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.leads.write"])
+        try:
+            lead = renovation.create_lead(ctx, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.lead.created",
+                lead.lead_id,
+                {"lead_id": lead.lead_id},
+            )
+            renovation_operator._record_for("renovation_leads", lead.lead_id)
+            metering.record(
+                ctx.tenant_id,
+                "renovation_leads",
+                metadata={"lead_id": lead.lead_id},
+            )
+            return lead.as_dict()
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/renovation/leads/{lead_id}", tags=["renovation-os"])
+    def renovation_lead_get(lead_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.leads.read"])
+        try:
+            return renovation.get_lead(ctx, lead_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post("/renovation/leads/{lead_id}/status", tags=["renovation-os"])
+    def renovation_lead_status(lead_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.leads.write"])
+        try:
+            return renovation.update_lead(ctx, lead_id, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/leads/{lead_id}/convert", tags=["renovation-os"])
+    def renovation_lead_convert(lead_id: str, payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.leads.write"])
+        try:
+            customer = renovation.convert_lead(ctx, lead_id, payload)
+            renovation_operator._event(
+                ctx,
+                "renovation.operator.lead.converted",
+                lead_id,
+                {"lead_id": lead_id, "customer_id": customer.customer_id},
+            )
+            renovation_operator._put_artifact(
+                ctx,
+                "renovation_customers",
+                customer.customer_id,
+                customer.as_dict(),
+                "customer.created",
+            )
+            renovation_operator._record_for("renovation_leads", lead_id)
+            return customer.as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/opportunities", tags=["renovation-os"])
+    def renovation_opportunity_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.write"])
+        try:
+            return renovation.create_opportunity(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get(
+        "/renovation/opportunities/{opportunity_id}",
+        tags=["renovation-os"],
+    )
+    def renovation_opportunity_get(opportunity_id: str, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.read"])
+        try:
+            return renovation.get_opportunity(ctx, opportunity_id).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+
+    @app.post(
+        "/renovation/opportunities/{opportunity_id}/stage",
+        tags=["renovation-os"],
+    )
+    def renovation_opportunity_stage(
+        opportunity_id: str,
+        payload: dict,
+        request: Request,
+    ):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.write"])
+        try:
+            return renovation.update_opportunity_stage(
+                ctx,
+                opportunity_id,
+                str(payload["stage"]),
+            ).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/follow-ups", tags=["renovation-os"])
+    def renovation_follow_up_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.write"])
+        try:
+            return renovation.create_follow_up(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/appointments", tags=["renovation-os"])
+    def renovation_appointment_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.write"])
+        try:
+            return renovation.create_appointment(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/site-visits", tags=["renovation-os"])
+    def renovation_site_visit_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.crm.write"])
+        try:
+            return renovation.create_site_visit(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/renovation/customer-messages", tags=["renovation-os"])
+    def renovation_customer_message_create(payload: dict, request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.communications.write"])
+        try:
+            return renovation.record_customer_message(ctx, payload).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get(
+        "/renovation/customers/{customer_id}/portal-view",
+        tags=["renovation-os"],
+    )
+    def renovation_customer_portal_view(
+        customer_id: str,
+        generated_date: str,
+        request: Request,
+    ):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.portal.read"])
+        try:
+            return renovation.customer_portal_view(
+                ctx,
+                customer_id,
+                generated_date,
+            ).as_dict()
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get(
+        "/renovation/jobs/{job_id}/customer-status",
+        tags=["renovation-os"],
+    )
+    def renovation_customer_job_status(
+        job_id: str,
+        generated_date: str,
+        request: Request,
+    ):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.portal.read"])
+        try:
+            return renovation.customer_job_status(ctx, job_id, generated_date)
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except AuthorizationError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
     @app.post("/connectors/register", tags=["enterprise-connectors"])

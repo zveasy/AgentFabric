@@ -74,6 +74,7 @@ The primary source of truth in this branch is the newer production server stack:
 - `agentfabric/verticals/renovation/jobs`, `documentation`, `change_orders`: proposal-to-job execution, audit-ready field records, rate-based change orders, approvals, and project history.
 - `agentfabric/verticals/renovation/scheduling`, `crews`, `deliveries`: dependency schedules, crew coordination, material tracking, conflict detection, delay analysis, and reproducible completion forecasts.
 - `agentfabric/verticals/renovation/finance`, `profitability`, `invoicing`: actual job costs, margin variance, cost overruns, receivables, payables, cash-flow forecasts, and owner summaries.
+- `agentfabric/verticals/renovation/leads`, `crm`, `communications`, `customer_portal`: lead acquisition, opportunities, follow-ups, appointments, communication history, and customer-safe project views.
 - `agentfabric/cli.py`: production-oriented CLI entrypoint.
 - `agents/manifest_schema/manifest.v1.schema.json`: manifest schema.
 - `tests`: runtime, production, API stack, and foundation tests.
@@ -97,6 +98,156 @@ Run migrations:
 Run API:
 
 `python -m agentfabric.cli api-run --database-url "postgresql+psycopg://agentfabric:agentfabric@localhost:5432/agentfabric" --redis-url "redis://localhost:6379/0" --jwt-secret "change-me" --bootstrap-token "bootstrap-dev" --host 0.0.0.0 --port 8000`
+
+Run the RenovationOS MVP locally:
+
+`AGENTFABRIC_BOOTSTRAP_TOKEN=bootstrap-dev AGENTFABRIC_JWT_SECRET=change-me-for-local-dev-only python -m agentfabric.cli api-run --database-url "sqlite:///./agentfabric_api.db" --redis-url "memory://" --host 127.0.0.1 --port 8000`
+
+Required local environment:
+
+- `AGENTFABRIC_BOOTSTRAP_TOKEN`: bootstrap token used to create the first principal.
+- `AGENTFABRIC_JWT_SECRET`: local JWT signing secret. In production it must be non-default and at least 32 characters.
+- `AGENTFABRIC_STATE_STORE_BACKEND`: optional; defaults to `sqlite`. Set to `memory` only for throwaway runs.
+- `AGENTFABRIC_STATE_STORE_PATH`: optional; chooses the SQLite document-store file. If unset with a SQLite API database, AgentFabric uses a sibling `*.state.db` file.
+
+Then open `http://127.0.0.1:8000/renovation/app` or `http://127.0.0.1:3000/renovation/app` if you run the API on port 3000. The browser console is now a small RenovationOS operator cockpit: dashboard metrics, lead intake, customer list, estimate builder, proposal view, job board, schedule view, cost/profitability, invoice/payment, customer portal preview, and the durable MVP runs/replay/resume panel.
+
+RenovationOS cockpit records are persisted in the configured state store. With the default SQLite state-store backend, the API uses `AGENTFABRIC_STATE_STORE_PATH` when set, or a sibling `*.state.db` file next to the SQLite API database. Set `AGENTFABRIC_STATE_STORE_BACKEND=memory` only for throwaway demos because operator records and MVP runs will not survive process restart.
+
+Cockpit RBAC:
+
+- `viewer`: read-only access to cockpit records, metrics, portal views, and MVP run history.
+- `operator`: create and update RenovationOS workflow records.
+- `owner`: manage workflow records and assign RenovationOS cockpit account roles.
+
+## RenovationOS SaaS readiness
+
+The cockpit now includes a local SaaS foundation while keeping the single-machine demo workflow intact:
+
+- Account context and role assignment endpoints for owner/operator/viewer access.
+- Proposal PDF export from persisted proposal and estimate data.
+- Local file attachments for customers, leads, estimates, proposals, jobs, invoices, and payments.
+- Provider-agnostic local stubs for notifications, calendar sync, and invoice payment links/status.
+- Dashboard metrics remain tenant-scoped and are safe for viewer access.
+
+New local environment:
+
+- `AGENTFABRIC_RENOVATION_STORAGE_DIR`: directory for uploaded RenovationOS files. Defaults to `/tmp/agentfabric-renovation-storage`.
+- `AGENTFABRIC_RENOVATION_MAX_UPLOAD_BYTES`: maximum accepted attachment size. Defaults to `10000000`.
+- `AGENTFABRIC_STATE_STORE_PATH`: SQLite state-store file for durable cockpit records.
+- `AGENTFABRIC_DATABASE_URL`: API database URL. For local SQLite production-style runs, mount the database directory as a volume.
+
+Example production-style local command:
+
+`AGENTFABRIC_ENVIRONMENT=production AGENTFABRIC_BOOTSTRAP_TOKEN=bootstrap-dev AGENTFABRIC_JWT_SECRET=replace-with-at-least-32-characters AGENTFABRIC_STATE_STORE_PATH=/data/agentfabric.state.db AGENTFABRIC_RENOVATION_STORAGE_DIR=/data/renovation-files python -m agentfabric.cli api-run --database-url "sqlite:////data/agentfabric_api.db" --redis-url "memory://" --host 0.0.0.0 --port 8000`
+
+Container notes:
+
+- The Docker image exposes port `8000`.
+- Mount `/data` for SQLite databases, state-store durability, queue files when used, and RenovationOS attachments.
+- The image health check calls `/health`.
+- Local notification, calendar, and payment providers are deterministic stubs. Replace them with SendGrid/Twilio, Google/Outlook calendar, and Stripe/Adyen-style providers before production customer use.
+- Attachment download/archive, provider validation, payment webhook status records, and branded proposal/invoice PDFs are available through the RenovationOS API while remaining deterministic locally.
+
+RenovationOS integration settings:
+
+- `AGENTFABRIC_RENOVATION_EMAIL_PROVIDER`: `local` or `smtp`. Defaults to `local`.
+- `AGENTFABRIC_RENOVATION_SMTP_HOST`, `AGENTFABRIC_RENOVATION_SMTP_PORT`, `AGENTFABRIC_RENOVATION_SMTP_USERNAME`, `AGENTFABRIC_RENOVATION_SMTP_PASSWORD`: SMTP connection settings.
+- `AGENTFABRIC_RENOVATION_EMAIL_SENDER`, `AGENTFABRIC_RENOVATION_EMAIL_REPLY_TO`: default sender identity.
+- `AGENTFABRIC_RENOVATION_SMTP_LIVE_ENABLED`: set `true` only after credentials, SPF/DKIM, and test sends are verified. When false, SMTP payloads are validated and recorded without live delivery.
+- `AGENTFABRIC_RENOVATION_SMS_PROVIDER`: `local` or `twilio`. The Twilio-compatible adapter expects a sender plus account credentials.
+- `AGENTFABRIC_RENOVATION_SMS_SENDER_ID`, `AGENTFABRIC_RENOVATION_SMS_ACCOUNT_SID`, `AGENTFABRIC_RENOVATION_SMS_AUTH_TOKEN`: SMS sender and provider credentials.
+- `AGENTFABRIC_RENOVATION_CALENDAR_PROVIDER`: `local`, `google`, or `outlook`. Google/Outlook modes are OAuth-ready shells until live OAuth is connected.
+- `AGENTFABRIC_RENOVATION_CALENDAR_OAUTH_CLIENT_ID`, `AGENTFABRIC_RENOVATION_CALENDAR_OAUTH_CLIENT_SECRET`: reserved for calendar OAuth setup.
+- `AGENTFABRIC_RENOVATION_PAYMENT_PROVIDER`: `local` or `stripe`. Stripe mode uses deterministic local links until live payment keys are wired.
+- `AGENTFABRIC_RENOVATION_PAYMENT_SECRET_KEY`, `AGENTFABRIC_RENOVATION_PAYMENT_WEBHOOK_SECRET`: reserved for Stripe-compatible payment links and webhook signature verification.
+
+Local/stub mode is the default for email, SMS, calendar, and payments so demos and tests do not need network access or real credentials. Live mode should be enabled only in a controlled environment with secrets stored outside source control. Webhook handlers must reject invalid signatures before payment state changes are trusted.
+
+SaaS API examples:
+
+`curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/renovation/account`
+
+`curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"account_id":"operator-a","role":"operator"}' http://127.0.0.1:8000/renovation/accounts/roles`
+
+`curl -H "Authorization: Bearer $TOKEN" -o proposal.pdf http://127.0.0.1:8000/renovation/proposals/$PROPOSAL_ID/pdf`
+
+`curl -X POST -H "Authorization: Bearer $TOKEN" -F "file=@scope.pdf" http://127.0.0.1:8000/renovation/files/proposal/$PROPOSAL_ID`
+
+`curl -H "Authorization: Bearer $TOKEN" -o invoice.pdf http://127.0.0.1:8000/renovation/invoices/$INVOICE_ID/pdf`
+
+`curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"status":"paid","provider_reference_id":"pay-ref-1","idempotency_key":"webhook-1","invoice_id":"'$INVOICE_ID'"}' http://127.0.0.1:8000/renovation/payments/webhook`
+- `owner`: all operator actions plus tenant/auth administration.
+
+Core cockpit APIs:
+
+- `GET /renovation/metrics`
+- `POST|GET /renovation/customers`
+- `GET /renovation/customers/{customer_id}`
+- `POST|GET /renovation/leads`
+- `GET /renovation/leads/{lead_id}`
+- `POST /renovation/leads/{lead_id}/convert`
+- `POST|GET /renovation/estimates`
+- `GET /renovation/estimates/{estimate_id}`
+- `POST /renovation/estimates/{estimate_id}/approve`
+- `POST|GET /renovation/proposals`
+- `GET /renovation/proposals/{proposal_id}`
+- `POST /renovation/proposals/{proposal_id}/accept`
+- `POST|GET /renovation/jobs`
+- `GET /renovation/jobs/{job_id}`
+- `PATCH /renovation/jobs/{job_id}/status`
+- `POST|GET /renovation/jobs/{job_id}/schedule`
+- `POST|GET /renovation/jobs/{job_id}/costs`
+- `GET /renovation/jobs/{job_id}/profitability`
+- `POST|GET /renovation/jobs/{job_id}/invoices`
+- `POST /renovation/invoices/{invoice_id}/payments`
+- `GET /renovation/jobs/{job_id}/portal`
+
+Example cockpit calls:
+
+`curl -sS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"name":"Morgan Homeowner","email":"morgan@example.com","phone":"555-0140","address":"200 Oak Street"}' http://127.0.0.1:8000/renovation/customers`
+
+`curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/renovation/metrics`
+
+`curl -sS -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"status":"planned"}' http://127.0.0.1:8000/renovation/jobs/$JOB_ID/status`
+
+Known cockpit limitations:
+
+- Proposal/job creation still relies on the deterministic RenovationOS estimate and proposal templates already in the repo.
+- Customer portal previews require enough job context to build a customer-safe status view.
+- The embedded dashboard is intentionally lightweight HTML/JS for local demos, not a production frontend shell.
+
+The MVP API surface is:
+
+- `POST /renovation/mvp/demo`: compatibility alias for creating a default MVP run.
+- `POST /renovation/mvp/runs`: create an idempotent run. Include `{"idempotency_key": "demo-001"}` to avoid duplicate records.
+- `GET /renovation/mvp/runs`: list tenant runs.
+- `GET /renovation/mvp/runs/{run_id}`: inspect run status, steps, entity IDs, financial summary, and failure details.
+- `POST /renovation/mvp/runs/{run_id}/replay`: record a replay of persisted run output.
+- `POST /renovation/mvp/runs/{run_id}/resume`: continue a failed or incomplete run from the last incomplete step.
+- `GET /renovation/mvp/runs/{run_id}/portal`: fetch customer-safe portal/status output.
+- `GET /renovation/health`: check RenovationOS state-store health and run count.
+
+Example MVP API call:
+
+`curl -sS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"idempotency_key":"demo-001","project":{"title":"Kitchen Remodel"},"customer":{"name":"Morgan Homeowner"}}' http://127.0.0.1:8000/renovation/mvp/runs`
+
+Run tests:
+
+`python -m pytest --collect-only`
+
+`python -m pytest tests/test_renovation_api.py -q`
+
+`python -m pytest`
+
+`python -m unittest discover -s tests`
+
+Troubleshooting:
+
+- If imports appear to hang inside `importlib`, regenerate first-party bytecode caches with `python -m compileall -f -q agentfabric agent_connectors agent_observability veil_client runtime registry scheduler orchestration memory evaluations versioning marketplace connectors tests`.
+- If SQLite state cannot be created, check write permissions for the API database directory or set `AGENTFABRIC_STATE_STORE_PATH` to a writable path.
+- If the dashboard returns `401`, create/issue a principal token first and paste it into the Bearer token field.
+- Current local limitation: full test collection can still be slow on macOS/Python 3.13 because the suite imports the entire API stack and assertion rewriting touches many modules.
 
 Run worker:
 
@@ -165,11 +316,11 @@ See [docs/build_workers.md](docs/build_workers.md) for worker governance and [do
 
 ## Vertical Solutions
 
-RenovationOS Operations Foundation is the first production vertical. It turns persisted project scope, room dimensions, quantities, and local rates into reproducible estimates and proposals, carries accepted work through job documentation and change-order approval, coordinates schedules, crews, and deliveries, and reports job profitability and cash flow.
+RenovationOS Operations Foundation is the first production vertical. It covers lead intake through customer conversion, deterministic estimating and proposals, active project operations, schedules and crews, job profitability, communications, and customer-safe portal views.
 
 ## Marketplace
 
-The vertical catalog includes **RenovationOS Operations Foundation** under Construction and Operations. Version 4 adds financial visibility, job profitability, cost-overrun detection, invoice and payable tracking, and cash-flow forecasting to the existing operational capabilities.
+The vertical catalog includes **RenovationOS Operations Foundation** under Construction and Operations. Version 5 adds CRM, lead intake, follow-up workflows, customer communications, and portal views to the existing operational and financial capabilities.
 
 ## API Reference
 
@@ -182,3 +333,5 @@ Operations APIs add jobs, daily logs, field notes, change-order creation/read/ap
 Scheduling APIs add schedules, recalculation, crews, availability, assignments, material deliveries, and customer-facing job schedule summaries. See [docs/renovationos_scheduling.md](docs/renovationos_scheduling.md).
 
 Finance APIs add job costs, profitability scorecards, invoices, payments, vendor payables, fixed-window cash-flow forecasts, and owner summaries. See [docs/renovationos_finance.md](docs/renovationos_finance.md).
+
+CRM and portal APIs add leads, opportunity stages, follow-ups, appointments, site visits, customer messages, portal views, and customer-status summaries. See [docs/renovationos_crm_portal.md](docs/renovationos_crm_portal.md).

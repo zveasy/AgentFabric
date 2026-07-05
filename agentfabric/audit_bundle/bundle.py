@@ -85,6 +85,15 @@ class AuditBundle:
     renovation_cost_overrun_alerts: list[dict[str, object]]
     renovation_cash_flow_forecasts: list[dict[str, object]]
     renovation_owner_summaries: list[dict[str, object]]
+    renovation_leads: list[dict[str, object]]
+    renovation_customers: list[dict[str, object]]
+    renovation_opportunities: list[dict[str, object]]
+    renovation_follow_ups: list[dict[str, object]]
+    renovation_appointments: list[dict[str, object]]
+    renovation_site_visits: list[dict[str, object]]
+    renovation_customer_messages: list[dict[str, object]]
+    renovation_communications: list[dict[str, object]]
+    renovation_portal_views: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         value = {
@@ -163,6 +172,15 @@ class AuditBundle:
             "renovation_cost_overrun_alerts": self.renovation_cost_overrun_alerts,
             "renovation_cash_flow_forecasts": self.renovation_cash_flow_forecasts,
             "renovation_owner_summaries": self.renovation_owner_summaries,
+            "renovation_leads": self.renovation_leads,
+            "renovation_customers": self.renovation_customers,
+            "renovation_opportunities": self.renovation_opportunities,
+            "renovation_follow_ups": self.renovation_follow_ups,
+            "renovation_appointments": self.renovation_appointments,
+            "renovation_site_visits": self.renovation_site_visits,
+            "renovation_customer_messages": self.renovation_customer_messages,
+            "renovation_communications": self.renovation_communications,
+            "renovation_portal_views": self.renovation_portal_views,
         }
         redacted = redact(value)
         if contains_raw_sensitive(redacted):

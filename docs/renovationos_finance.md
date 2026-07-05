@@ -110,4 +110,4 @@ Audit bundles include:
 
 ## Marketplace
 
-RenovationOS Operations Foundation version `4.0.0` adds financial visibility, job profitability, cost-overrun detection, invoice and payable tracking, and cash-flow forecasting.
+RenovationOS Operations Foundation version `4.0.0` added financial visibility, job profitability, cost-overrun detection, invoice and payable tracking, and cash-flow forecasting. Version `5.0.0` adds CRM and customer portal capabilities.

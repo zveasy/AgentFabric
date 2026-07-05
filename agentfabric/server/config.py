@@ -41,6 +41,28 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     json_logs: bool = True  # set False for dev console; production uses True
     factory_output_root: str = "/tmp/agentfabric-generated"
+    state_store_backend: str = "sqlite"
+    state_store_path: str | None = None
+    renovation_storage_dir: str = "/tmp/agentfabric-renovation-storage"
+    renovation_max_upload_bytes: int = 10_000_000
+    renovation_email_provider: str = "local"
+    renovation_smtp_host: str | None = None
+    renovation_smtp_port: int = 587
+    renovation_smtp_username: str | None = None
+    renovation_smtp_password: str | None = None
+    renovation_email_sender: str = "renovationos@example.local"
+    renovation_email_reply_to: str | None = None
+    renovation_smtp_live_enabled: bool = False
+    renovation_sms_provider: str = "local"
+    renovation_sms_sender_id: str | None = None
+    renovation_sms_account_sid: str | None = None
+    renovation_sms_auth_token: str | None = None
+    renovation_calendar_provider: str = "local"
+    renovation_calendar_oauth_client_id: str | None = None
+    renovation_calendar_oauth_client_secret: str | None = None
+    renovation_payment_provider: str = "local"
+    renovation_payment_secret_key: str | None = None
+    renovation_payment_webhook_secret: str | None = None
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -96,3 +96,7 @@ RenovationOS execution planning adds dependency-aware schedules, crew availabili
 # Generation R4: RenovationOS Finance
 
 RenovationOS financial intelligence adds typed actual job costs, estimated-versus-actual margin analysis, receivable and payable ledgers, bounded payment application, fixed-window cash-flow forecasts, deterministic profitability scorecards, owner summaries, and replayable financial evidence.
+
+# Generation R5: RenovationOS CRM and Portal
+
+RenovationOS customer operations add deterministic lead intake, lifecycle-controlled conversion, opportunities, follow-ups, appointments, site visits, communication history, and allowlist-based customer portal projections that exclude internal finance, risk, audit, and authorization data.
