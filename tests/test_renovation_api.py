@@ -729,12 +729,81 @@ class RenovationApiTests(unittest.TestCase):
         self.assertGreater(metrics.json()["estimated_revenue"], 0)
         self.assertEqual(metrics.json()["invoiced_revenue"], 5000)
         self.assertEqual(metrics.json()["paid_revenue"], 1000)
+        readiness = self.client.get("/renovation/readiness", headers=self.headers)
+        self.assertEqual(readiness.status_code, 200)
+        readiness_payload = readiness.json()
+        self.assertEqual(readiness_payload["tenant_id"], "tenant-a")
+        self.assertEqual(readiness_payload["actor_id"], "owner-a")
+        self.assertIn("database", {check["key"] for check in readiness_payload["checks"]})
+        self.assertIn("file_storage", {check["key"] for check in readiness_payload["checks"]})
+        self.assertIn("payments", {check["key"] for check in readiness_payload["checks"]})
+        self.assertFalse(readiness_payload["ready_for_production"])
+        self.assertGreaterEqual(readiness_payload["operator_summary"]["counts"]["unpaid_invoices"], 1)
+        self.assertTrue(readiness_payload["operator_summary"]["messages"])
+        self.assertIn("Live SMS vendor SDK calls", readiness_payload["missing_production_capabilities"])
+
+        lead_filter = self.client.get(
+            "/renovation/leads",
+            params={"search": "Morgan", "limit": 1, "offset": 0},
+            headers=self.headers,
+        )
+        self.assertEqual(lead_filter.status_code, 200)
+        self.assertEqual(lead_filter.json()["limit"], 1)
+        self.assertEqual(lead_filter.json()["offset"], 0)
+        self.assertEqual(lead_filter.json()["filters"]["search"], "morgan")
+        self.assertEqual(lead_filter.json()["total"], 1)
+        job_filter = self.client.get(
+            "/renovation/jobs",
+            params={"status": "planned"},
+            headers=self.headers,
+        )
+        self.assertEqual(job_filter.status_code, 200)
+        self.assertEqual(job_filter.json()["total"], 1)
+        invoice_filter = self.client.get(
+            "/renovation/invoices",
+            params={"date_from": "2026-07-01", "date_to": "2026-07-31", "limit": 10},
+            headers=self.headers,
+        )
+        self.assertEqual(invoice_filter.status_code, 200)
+        self.assertEqual(invoice_filter.json()["total"], 1)
+        payment_filter = self.client.get("/renovation/payments", headers=self.headers)
+        self.assertEqual(payment_filter.status_code, 200)
+        self.assertGreaterEqual(payment_filter.json()["total"], 1)
+        schedule_filter = self.client.get("/renovation/schedule", headers=self.headers)
+        self.assertEqual(schedule_filter.status_code, 200)
+        self.assertEqual(schedule_filter.json()["total"], 1)
+
+        app_shell = self.client.get("/renovation/app")
+        self.assertEqual(app_shell.status_code, 200)
+        for label in (
+            "Dashboard",
+            "Customers",
+            "Leads",
+            "Estimates",
+            "Proposals",
+            "Jobs",
+            "Schedule",
+            "Invoices",
+            "Payments",
+            "Files",
+            "Settings",
+            "Integrations",
+            "Readiness",
+        ):
+            self.assertIn(label, app_shell.text)
+        self.assertIn("Operator Summary", app_shell.text)
+        self.assertIn("Filter Leads", app_shell.text)
 
         viewer = self._principal("viewer-operator", "tenant-a", "viewer")
         self.assertEqual(
             self.client.get("/renovation/metrics", headers=viewer).status_code,
             200,
         )
+        self.assertEqual(
+            self.client.get("/renovation/readiness", headers=viewer).status_code,
+            200,
+        )
+        self.assertEqual(self.client.get("/renovation/readiness").status_code, 401)
         self.assertEqual(
             self.client.post(
                 "/renovation/customers",

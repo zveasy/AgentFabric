@@ -896,6 +896,8 @@ def _renovation_app_html() -> str:
     .summary-line { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 7px 0; }
     .summary-line span { color: var(--muted); }
     .summary-line strong { text-align: right; }
+    .filter-bar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 10px 0 12px; }
+    .filter-bar input, .filter-bar select { padding: 8px 9px; font-size: 13px; }
     .empty {
       color: var(--muted);
       padding: 13px;
@@ -911,11 +913,13 @@ def _renovation_app_html() -> str:
       main { grid-template-columns: 1fr; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
       .grid, .form-grid, .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .panel { scroll-margin-top: 16px; }
     }
     @media (max-width: 620px) {
       header, .section-title { flex-direction: column; align-items: flex-start; }
       .grid, .form-grid, .timeline { grid-template-columns: 1fr; }
+      .filter-bar { grid-template-columns: 1fr; }
       .full { grid-column: auto; }
       table { min-width: 480px; }
     }
@@ -946,13 +950,18 @@ def _renovation_app_html() -> str:
       <button id="refresh" class="secondary">Refresh Workspace</button>
       <nav>
         <a href="#dashboard">Dashboard</a>
-        <a href="#lead-panel">Lead Intake</a>
-        <a href="#estimate-panel">Estimate Builder</a>
-        <a href="#job-panel">Jobs & Schedule</a>
-        <a href="#finance-panel">Costs & Invoices</a>
-        <a href="#portal-panel">Customer Portal</a>
+        <a href="#customers-panel">Customers</a>
+        <a href="#leads-panel">Leads</a>
+        <a href="#estimates-panel">Estimates</a>
+        <a href="#proposals-panel">Proposals</a>
+        <a href="#jobs-panel">Jobs</a>
+        <a href="#schedule-panel">Schedule</a>
+        <a href="#invoices-panel">Invoices</a>
+        <a href="#payments-panel">Payments</a>
         <a href="#files-panel">Files</a>
         <a href="#settings-panel">Settings</a>
+        <a href="#integrations-panel">Integrations</a>
+        <a href="#readiness-panel">Readiness</a>
         <a href="#demo-panel">Demo Runs</a>
       </nav>
       <label for="idempotency">Demo run name</label>
@@ -980,8 +989,12 @@ def _renovation_app_html() -> str:
         <h2>Dashboard Summary</h2>
         <div id="metrics" class="summary-list"><div class="empty">Connect the local workspace to load dashboard metrics.</div></div>
       </div>
+      <div class="panel">
+        <h2>Operator Summary</h2>
+        <div id="operator-summary" class="summary-list"><div class="empty">Connect workspace to see what needs attention.</div></div>
+      </div>
       <div class="grid">
-        <div id="lead-panel" class="panel tool-panel">
+        <div id="leads-panel" class="panel tool-panel">
           <h2>Lead Intake</h2>
           <label for="lead-name">Customer name</label>
           <input id="lead-name" value="Morgan Homeowner">
@@ -1002,7 +1015,7 @@ def _renovation_app_html() -> str:
           <textarea id="lead-description">Replace cabinets, counters, and flooring.</textarea>
           <button id="create-lead">Create Lead</button>
         </div>
-        <div id="estimate-panel" class="panel tool-panel">
+        <div id="estimates-panel" class="panel tool-panel">
           <h2>Estimate Builder</h2>
           <label for="estimate-title">Project name</label>
           <input id="estimate-title" value="Kitchen Remodel">
@@ -1021,7 +1034,7 @@ def _renovation_app_html() -> str:
 Flooring replacement</textarea>
           <button id="create-estimate">Create Estimate</button>
         </div>
-        <div id="job-panel" class="panel tool-panel">
+        <div id="jobs-panel" class="panel tool-panel">
           <h2>Job Action</h2>
           <label for="job-select">Selected job</label>
           <select id="job-select"></select>
@@ -1035,7 +1048,7 @@ Flooring replacement</textarea>
           </select>
           <button id="update-status">Update Status</button>
         </div>
-        <div id="finance-panel" class="panel tool-panel">
+        <div id="invoices-panel" class="panel tool-panel">
           <h2>Cost / Invoice</h2>
           <label for="finance-description">Description</label>
           <input id="finance-description" value="Project deposit">
@@ -1051,20 +1064,37 @@ Flooring replacement</textarea>
           </div>
         </div>
       </div>
-      <div class="panel">
+      <div id="customers-panel" class="panel">
         <h2>Customer List</h2>
+        <div class="filter-bar">
+          <input id="customer-search" placeholder="Search customers">
+          <button id="apply-filters" class="quiet">Apply Filters</button>
+        </div>
         <div class="table-wrap"><table><thead><tr><th>Customer</th><th>Email</th><th>Phone</th></tr></thead><tbody id="customers"><tr><td colspan="3" class="empty">Connect workspace to load customers.</td></tr></tbody></table></div>
       </div>
       <div class="panel">
         <h2>Lead Pipeline</h2>
+        <div class="filter-bar">
+          <input id="lead-search" placeholder="Search leads">
+          <select id="lead-status"><option value="">Any status</option><option value="new">New</option><option value="contacted">Contacted</option><option value="converted">Converted</option></select>
+          <input id="lead-date-from" type="date">
+          <input id="lead-date-to" type="date">
+          <button id="apply-lead-filters" class="quiet">Filter Leads</button>
+        </div>
         <div class="table-wrap"><table><thead><tr><th>Lead</th><th>Status</th><th>Project</th><th>Next action</th></tr></thead><tbody id="lead-table"><tr><td colspan="4" class="empty">Create a lead or run the sample job.</td></tr></tbody></table></div>
       </div>
-      <div class="panel">
+      <div id="proposals-panel" class="panel">
         <h2>Proposal View</h2>
         <div class="table-wrap"><table><thead><tr><th>Proposal</th><th>Status</th><th>Customer</th><th>Total</th><th>Actions</th></tr></thead><tbody id="proposals"><tr><td colspan="5" class="empty">Approved estimates and proposals will appear here.</td></tr></tbody></table></div>
       </div>
       <div class="panel">
         <h2>Job Board</h2>
+        <div class="filter-bar">
+          <input id="job-search" placeholder="Search jobs">
+          <select id="job-filter-status"><option value="">Any status</option><option value="planned">Planned</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option></select>
+          <input id="job-customer-filter" placeholder="Customer ID">
+          <button id="apply-job-filters" class="quiet">Filter Jobs</button>
+        </div>
         <div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th>Project</th><th>Customer</th></tr></thead><tbody id="job-table"><tr><td colspan="4" class="empty">Accepted proposals become jobs.</td></tr></tbody></table></div>
       </div>
       <div id="files-panel" class="panel">
@@ -1107,7 +1137,7 @@ Flooring replacement</textarea>
         <button id="save-company">Save Branding</button>
         <button id="assign-role" class="secondary">Assign Role</button>
         <div class="table-wrap"><table><thead><tr><th>Account</th><th>Role</th><th>Status</th></tr></thead><tbody id="accounts"><tr><td colspan="3" class="empty">No accounts loaded.</td></tr></tbody></table></div>
-        <h3>Integrations</h3>
+        <h3 id="integrations-panel">Integrations</h3>
         <div class="notice">
           <strong>Local-safe provider mode</strong>
           Email, SMS, calendar, and payment providers use deterministic shells unless live provider credentials are configured.
@@ -1118,7 +1148,7 @@ Flooring replacement</textarea>
         <div class="table-wrap"><table><thead><tr><th>Event</th><th>Channel</th><th>Status</th></tr></thead><tbody id="notifications"><tr><td colspan="3" class="empty">No notifications loaded.</td></tr></tbody></table></div>
       </div>
       <div class="grid">
-        <div class="panel">
+        <div id="schedule-panel" class="panel">
           <h2>Schedule View</h2>
           <label for="schedule-date">Start date</label>
           <input id="schedule-date" type="date" value="2026-07-06">
@@ -1131,7 +1161,11 @@ Flooring replacement</textarea>
           <h2>Cost / Profitability</h2>
           <div id="profitability" class="summary-list"><div class="empty">Select a job to see costs and margin.</div></div>
         </div>
-        <div class="panel">
+        <div id="readiness-panel" class="panel">
+          <h2>Readiness</h2>
+          <div id="readiness" class="summary-list"><div class="empty">Connect workspace to load readiness checks.</div></div>
+        </div>
+        <div id="payments-panel" class="panel">
           <h2>Invoice / Payment</h2>
           <label for="invoice-select">Invoice</label>
           <select id="invoice-select"></select>
@@ -1221,6 +1255,16 @@ Flooring replacement</textarea>
       const cls = good.includes(normalized) ? "good" : warn.includes(normalized) ? "warn" : "";
       return `<span class="badge ${cls}">${normalized.replaceAll("_", " ")}</span>`;
     }
+    function query(params) {
+      const clean = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "");
+      return clean.length ? `?${new URLSearchParams(clean).toString()}` : "";
+    }
+    function activeFilters(type) {
+      if (type === "leads") return query({search: $("lead-search")?.value, status: $("lead-status")?.value, date_from: $("lead-date-from")?.value, date_to: $("lead-date-to")?.value, limit: 50});
+      if (type === "jobs") return query({search: $("job-search")?.value, status: $("job-filter-status")?.value, customer_id: $("job-customer-filter")?.value, limit: 50});
+      if (type === "customers") return query({search: $("customer-search")?.value, limit: 50});
+      return query({limit: 50});
+    }
     async function connectAccess() {
       const bootstrap = $("bootstrap-token").value.trim();
       const principal = $("principal-id").value.trim() || "owner-a";
@@ -1306,18 +1350,23 @@ Flooring replacement</textarea>
     async function loadCockpit() {
       try {
         $("metrics").innerHTML = `<div class="empty">Loading dashboard...</div>`;
-        const [metrics, customers, leads, proposals, jobs, account, accounts, files, notifications, company, integrations] = await Promise.all([
+        const [metrics, customers, leads, estimates, proposals, jobs, invoices, payments, schedules, account, accounts, files, notifications, company, integrations, readiness] = await Promise.all([
           api("/renovation/metrics"),
-          api("/renovation/customers"),
-          api("/renovation/leads"),
+          api(`/renovation/customers${activeFilters("customers")}`),
+          api(`/renovation/leads${activeFilters("leads")}`),
+          api("/renovation/estimates?limit=50"),
           api("/renovation/proposals"),
-          api("/renovation/jobs"),
+          api(`/renovation/jobs${activeFilters("jobs")}`),
+          api("/renovation/invoices?limit=50"),
+          api("/renovation/payments?limit=50"),
+          api("/renovation/schedule?limit=50"),
           api("/renovation/account"),
           api("/renovation/accounts"),
           api("/renovation/files"),
           api("/renovation/notifications"),
           api("/renovation/settings/company"),
           api("/renovation/integrations"),
+          api("/renovation/readiness"),
         ]);
         $("metric-leads").textContent = metrics.total_leads;
         $("metric-jobs").textContent = metrics.active_jobs;
@@ -1335,6 +1384,13 @@ Flooring replacement</textarea>
           line("Jobs at risk", metrics.jobs_at_risk),
           line("Average estimate", money(metrics.average_estimate_value)),
           line("Average job margin", pct(metrics.average_job_margin))
+        ].join("");
+        $("operator-summary").innerHTML = (readiness.operator_summary?.messages || []).map((message) => `<div class="notice"><strong>Needs attention</strong>${message}</div>`).join("");
+        $("readiness").innerHTML = [
+          line("Production ready", readiness.ready_for_production ? "Yes" : "Not yet"),
+          line("Mode", readiness.mode),
+          line("Missing capabilities", readiness.missing_production_capabilities?.length || 0),
+          ...(readiness.checks || []).map((check) => line(check.label, `${check.status} - ${check.detail}`))
         ].join("");
         if (!customers.items.length) tableEmpty("customers", 3, "No customers yet.");
         else $("customers").innerHTML = customers.items.map((record) => {
@@ -1373,6 +1429,12 @@ Flooring replacement</textarea>
           });
           await loadJobPanels();
         }
+        if (!estimates.items.length) {
+          // Estimate records are summarized through metrics and proposal creation.
+        }
+        if (!invoices.items.length) {
+          $("invoice-select").innerHTML = `<option value="">No invoices yet</option>`;
+        }
         $("account-context").innerHTML = [
           line("Tenant", account.tenant_id),
           line("User", account.principal_id),
@@ -1387,6 +1449,9 @@ Flooring replacement</textarea>
         renderFiles(files.items || []);
         renderNotifications(notifications.items || []);
         renderIntegrations(integrations.items || []);
+        if (payments.total || schedules.total) {
+          // Payment and schedule sections use the shared API data for readiness and selected-job panels.
+        }
         $("company-name").value = company.artifact?.company_name || "";
         $("company-email").value = company.artifact?.email || "";
       } catch (err) {
@@ -1524,6 +1589,9 @@ Flooring replacement</textarea>
     }
     $("connect-access").addEventListener("click", connectAccess);
     $("refresh").addEventListener("click", async () => { await loadCockpit(); await refreshRuns(); });
+    $("apply-filters").addEventListener("click", loadCockpit);
+    $("apply-lead-filters").addEventListener("click", loadCockpit);
+    $("apply-job-filters").addEventListener("click", loadCockpit);
     $("run-demo").addEventListener("click", async () => {
       try { await createRun($("idempotency").value.trim() ? {idempotency_key: $("idempotency").value.trim()} : {}); }
       catch (err) { $("status").textContent = "Error"; $("error").textContent = err.message; }
@@ -1902,6 +1970,129 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             item.setdefault("mode", "stub" if item["stub_mode"] else "configured")
             item.setdefault("status", "local_stub" if item["stub_mode"] else "configured")
         return {"items": items, "total": len(items)}
+
+    def _renovation_query_filters(request: Request) -> dict[str, object]:
+        params = request.query_params
+        return {
+            "search": params.get("search", ""),
+            "status": params.get("status", ""),
+            "customer_id": params.get("customer_id", ""),
+            "date_from": params.get("date_from", ""),
+            "date_to": params.get("date_to", ""),
+            "limit": params.get("limit", 50),
+            "offset": params.get("offset", 0),
+        }
+
+    def _renovation_operator_summary(ctx: TenantContext, integrations: dict[str, object]) -> dict[str, object]:
+        leads = [dict(item.get("artifact", {})) for item in durable_store.list_tenant("renovation_leads", ctx.tenant_id)]
+        jobs = [dict(item.get("artifact", {})) for item in durable_store.list_tenant("renovation_jobs", ctx.tenant_id)]
+        invoices = [dict(item.get("artifact", {})) for item in durable_store.list_tenant("renovation_invoices", ctx.tenant_id)]
+        unconverted_leads = [lead for lead in leads if not lead.get("customer_id")]
+        jobs_at_risk = [job for job in jobs if job.get("status") in {"delayed", "at_risk", "on_hold"}]
+        unpaid_invoices = [invoice for invoice in invoices if float(invoice.get("outstanding_balance", invoice.get("total", 0)) or 0) > 0]
+        missing_integrations = [
+            item for item in integrations.get("items", []) if not item.get("valid") or item.get("stub_mode")
+        ]
+        messages = []
+        if unpaid_invoices:
+            messages.append(f"{len(unpaid_invoices)} invoice{'s' if len(unpaid_invoices) != 1 else ''} still need payment follow-up.")
+        if jobs_at_risk:
+            messages.append(f"{len(jobs_at_risk)} job{'s are' if len(jobs_at_risk) != 1 else ' is'} marked at risk or on hold.")
+        if unconverted_leads:
+            messages.append(f"{len(unconverted_leads)} lead{'s' if len(unconverted_leads) != 1 else ''} have not been converted.")
+        if missing_integrations:
+            messages.append("Production integrations are still in local/stub mode or need setup.")
+        if not messages:
+            messages.append("No urgent operator follow-up found for the current tenant.")
+        return {
+            "messages": messages,
+            "counts": {
+                "unpaid_invoices": len(unpaid_invoices),
+                "jobs_at_risk": len(jobs_at_risk),
+                "unconverted_leads": len(unconverted_leads),
+                "missing_integrations": len(missing_integrations),
+            },
+        }
+
+    def _renovation_readiness(ctx: TenantContext) -> dict[str, object]:
+        integrations = _renovation_integration_statuses()
+        account = renovation_operator.account_context(ctx)
+        storage_path = Path(settings.renovation_storage_dir)
+        checks = [
+            {
+                "key": "database",
+                "label": "Database durability",
+                "status": "ready" if settings.database_url else "missing",
+                "detail": "API database URL is configured.",
+            },
+            {
+                "key": "file_storage",
+                "label": "File storage",
+                "status": "ready" if settings.renovation_storage_dir else "missing",
+                "detail": f"Attachments store under {storage_path}.",
+            },
+            {
+                "key": "smtp",
+                "label": "SMTP email",
+                "status": "ready" if any(item.get("provider_type") == "email" and item.get("valid") and not item.get("stub_mode") for item in integrations["items"]) else "stub",
+                "detail": "Email remains local/stub unless SMTP live mode and host credentials are configured.",
+            },
+            {
+                "key": "sms",
+                "label": "SMS",
+                "status": "ready" if any(item.get("provider_type") == "sms" and item.get("valid") and not item.get("stub_mode") for item in integrations["items"]) else "stub",
+                "detail": "SMS adapter is Twilio-compatible but local by default.",
+            },
+            {
+                "key": "calendar",
+                "label": "Calendar",
+                "status": "ready" if any(item.get("provider_type") == "calendar" and item.get("valid") and not item.get("stub_mode") for item in integrations["items"]) else "stub",
+                "detail": "Google/Outlook interfaces are OAuth-ready shells.",
+            },
+            {
+                "key": "payments",
+                "label": "Payments",
+                "status": "ready" if any(item.get("provider_type") == "payment" and item.get("valid") and not item.get("stub_mode") for item in integrations["items"]) else "stub",
+                "detail": "Stripe-style payment links and webhooks are deterministic by default.",
+            },
+            {
+                "key": "rbac",
+                "label": "RBAC",
+                "status": "ready" if account["permissions"]["can_view"] else "missing",
+                "detail": f"Current actor {account['principal_id']} is scoped to role {account['role']}.",
+            },
+            {
+                "key": "audit",
+                "label": "Audit trail",
+                "status": "ready",
+                "detail": "RenovationOS workflow, file, provider, and payment events are audited.",
+            },
+            {
+                "key": "deployment",
+                "label": "Deployment readiness",
+                "status": "ready" if settings.environment == "production" else "needs_review",
+                "detail": f"Environment is {settings.environment}. Use production secrets, durable volumes, and external providers before customer launch.",
+            },
+        ]
+        missing = [
+            "Live SMS vendor SDK calls",
+            "Calendar OAuth consent and token refresh",
+            "Live Stripe checkout/webhook verification",
+            "Production secret rotation workflow",
+        ]
+        summary = _renovation_operator_summary(ctx, integrations)
+        ready = all(check["status"] == "ready" for check in checks)
+        return {
+            "tenant_id": ctx.tenant_id,
+            "organization_id": ctx.organization_id,
+            "actor_id": ctx.principal_id,
+            "ready_for_production": ready,
+            "mode": "production" if settings.environment == "production" else "local_demo",
+            "checks": checks,
+            "integrations": integrations,
+            "operator_summary": summary,
+            "missing_production_capabilities": missing,
+        }
 
     enterprise_connectors = EnterpriseConnectorService(
         persistence=durable_store,
@@ -4159,6 +4350,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_scopes(request, ["renovation.operator.read"])
         return renovation_operator.metrics(ctx)
 
+    @app.get("/renovation/readiness", tags=["renovation-os"])
+    def renovation_readiness(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return _renovation_readiness(ctx)
+
     @app.get("/renovation/account", tags=["renovation-os"])
     def renovation_account_context(request: Request):
         ctx = _tenant_context(request)
@@ -4169,7 +4366,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_accounts_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_accounts(ctx)
+        return renovation_operator.list_accounts(ctx, _renovation_query_filters(request))
 
     @app.post("/renovation/accounts/roles", tags=["renovation-os"])
     def renovation_account_role_assign(payload: dict, request: Request, db: Session = Depends(get_db)):
@@ -4216,7 +4413,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_customers_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_customers(ctx)
+        return renovation_operator.list_customers(ctx, _renovation_query_filters(request))
 
     @app.get("/renovation/customers/{customer_id}", tags=["renovation-os"])
     def renovation_customer_get(customer_id: str, request: Request):
@@ -4231,13 +4428,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_leads_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_leads(ctx)
+        return renovation_operator.list_leads(ctx, _renovation_query_filters(request))
 
     @app.get("/renovation/estimates", tags=["renovation-os"])
     def renovation_estimates_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_estimates(ctx)
+        return renovation_operator.list_estimates(ctx, _renovation_query_filters(request))
 
     @app.post("/renovation/estimates", tags=["renovation-os"])
     def renovation_estimates_create(payload: dict, request: Request):
@@ -4270,7 +4467,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_proposals_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_proposals(ctx)
+        return renovation_operator.list_proposals(ctx, _renovation_query_filters(request))
 
     @app.post("/renovation/proposals", tags=["renovation-os"])
     def renovation_proposals_create(payload: dict, request: Request):
@@ -4333,7 +4530,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_jobs_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_jobs(ctx)
+        return renovation_operator.list_jobs(ctx, _renovation_query_filters(request))
 
     @app.patch("/renovation/jobs/{job_id}/status", tags=["renovation-os"])
     def renovation_job_status_update(job_id: str, payload: dict, request: Request):
@@ -4361,13 +4558,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_job_schedules_list(job_id: str, request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_job_schedules(ctx, job_id)
+        return renovation_operator.list_job_schedules(ctx, job_id, _renovation_query_filters(request))
+
+    @app.get("/renovation/schedule", tags=["renovation-os"])
+    def renovation_schedules_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_schedules(ctx, _renovation_query_filters(request))
 
     @app.get("/renovation/jobs/{job_id}/costs", tags=["renovation-os"])
     def renovation_job_costs_list(job_id: str, request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_costs(ctx, job_id)
+        return renovation_operator.list_costs(ctx, job_id, _renovation_query_filters(request))
 
     @app.post("/renovation/jobs/{job_id}/invoices", tags=["renovation-os"])
     def renovation_job_invoice_create(job_id: str, payload: dict, request: Request):
@@ -4384,7 +4587,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_job_invoices_list(job_id: str, request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_invoices(ctx, job_id)
+        return renovation_operator.list_invoices(ctx, job_id, _renovation_query_filters(request))
+
+    @app.get("/renovation/invoices", tags=["renovation-os"])
+    def renovation_invoices_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_all_invoices(ctx, _renovation_query_filters(request))
+
+    @app.get("/renovation/payments", tags=["renovation-os"])
+    def renovation_payments_list(request: Request):
+        ctx = _tenant_context(request)
+        require_scopes(request, ["renovation.operator.read"])
+        return renovation_operator.list_payment_statuses(ctx, _renovation_query_filters(request))
 
     @app.post("/renovation/invoices/{invoice_id}/payments", tags=["renovation-os"])
     def renovation_invoice_payment_create(invoice_id: str, payload: dict, request: Request):
@@ -4481,7 +4696,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def renovation_notifications_list(request: Request):
         ctx = _tenant_context(request)
         require_scopes(request, ["renovation.operator.read"])
-        return renovation_operator.list_notifications(ctx)
+        return renovation_operator.list_notifications(ctx, _renovation_query_filters(request))
 
     @app.post("/renovation/schedule/{schedule_id}/sync", tags=["renovation-os"])
     def renovation_schedule_sync(schedule_id: str, request: Request, payload: dict | None = None):

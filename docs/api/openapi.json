@@ -11689,6 +11689,41 @@
       }
     },
     "/renovation/invoices": {
+      "get": {
+        "operationId": "renovation_invoices_list_renovation_invoices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Invoices List",
+        "tags": [
+          "renovation-os"
+        ]
+      },
       "post": {
         "operationId": "renovation_invoice_create_renovation_invoices_post",
         "requestBody": {
@@ -14384,6 +14419,43 @@
         ]
       }
     },
+    "/renovation/payments": {
+      "get": {
+        "operationId": "renovation_payments_list_renovation_payments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Payments List",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
     "/renovation/payments/webhook": {
       "post": {
         "operationId": "renovation_payment_webhook_renovation_payments_webhook_post",
@@ -14894,6 +14966,80 @@
           }
         },
         "summary": "Renovation Proposal Pdf",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/readiness": {
+      "get": {
+        "operationId": "renovation_readiness_renovation_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Readiness",
+        "tags": [
+          "renovation-os"
+        ]
+      }
+    },
+    "/renovation/schedule": {
+      "get": {
+        "operationId": "renovation_schedules_list_renovation_schedule_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication failure"
+          },
+          "403": {
+            "description": "RBAC, tenant isolation, policy, or trust denial"
+          },
+          "404": {
+            "description": "Resource not found"
+          },
+          "409": {
+            "description": "Conflict, quota, approval, integrity, or state failure"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        },
+        "summary": "Renovation Schedules List",
         "tags": [
           "renovation-os"
         ]

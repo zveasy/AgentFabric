@@ -135,8 +135,8 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.account.role_assigned", account_id, {"account_id": account_id, "role": role})
         return record
 
-    def list_accounts(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_accounts")
+    def list_accounts(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_accounts", filters)
 
     def create_customer(self, ctx: TenantContext, payload: dict[str, object]) -> dict[str, object]:
         customer = Customer(
@@ -148,8 +148,8 @@ class RenovationOperatorCockpit:
         )
         return self._put_artifact(ctx, "renovation_customers", customer.customer_id, customer.as_dict(), "customer.created")
 
-    def list_customers(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_customers")
+    def list_customers(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_customers", filters)
 
     def get_customer(self, ctx: TenantContext, customer_id: str) -> dict[str, object]:
         return self._artifact(ctx, "renovation_customers", customer_id)
@@ -159,8 +159,8 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.lead.created", lead.lead_id, {"lead_id": lead.lead_id})
         return self._record_for("renovation_leads", lead.lead_id)
 
-    def list_leads(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_leads")
+    def list_leads(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_leads", filters)
 
     def convert_lead(self, ctx: TenantContext, lead_id: str, payload: dict[str, object]) -> dict[str, object]:
         customer = self.service.convert_lead(ctx, lead_id, payload)
@@ -172,8 +172,8 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.estimate.created", estimate.estimate_id, {"estimate_id": estimate.estimate_id})
         return self._record_for("renovation_estimates", estimate.estimate_id)
 
-    def list_estimates(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_estimates")
+    def list_estimates(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_estimates", filters)
 
     def approve_estimate(self, ctx: TenantContext, estimate_id: str) -> dict[str, object]:
         record = self._tenant_record(ctx, "renovation_estimates", estimate_id)
@@ -199,8 +199,8 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.proposal.created", proposal.proposal_id, {"proposal_id": proposal.proposal_id})
         return self._record_for("renovation_proposals", proposal.proposal_id)
 
-    def list_proposals(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_proposals")
+    def list_proposals(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_proposals", filters)
 
     def accept_proposal(self, ctx: TenantContext, proposal_id: str, payload: dict[str, object]) -> dict[str, object]:
         record = self._tenant_record(ctx, "renovation_proposals", proposal_id)
@@ -218,8 +218,8 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.job.created", job.job_id, {"job_id": job.job_id})
         return self._record_for("renovation_jobs", job.job_id)
 
-    def list_jobs(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_jobs")
+    def list_jobs(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_jobs", filters)
 
     def update_job_status(self, ctx: TenantContext, job_id: str, payload: dict[str, object]) -> dict[str, object]:
         job = self.service.update_job(ctx, job_id, {"status": str(payload["status"]), **payload})
@@ -231,16 +231,19 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.schedule_item.created", schedule.schedule_id, {"job_id": job_id, "schedule_id": schedule.schedule_id})
         return self._record_for("renovation_schedules", schedule.schedule_id)
 
-    def list_job_schedules(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
-        return self._list_by(ctx, "renovation_schedules", "job_id", job_id)
+    def list_job_schedules(self, ctx: TenantContext, job_id: str, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list_by(ctx, "renovation_schedules", "job_id", job_id, filters)
+
+    def list_schedules(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_schedules", filters)
 
     def create_cost(self, ctx: TenantContext, job_id: str, payload: dict[str, object]) -> dict[str, object]:
         cost = self.service.record_job_cost(ctx, job_id, payload)
         self._event(ctx, "renovation.operator.cost_item.created", cost.cost_record_id, {"job_id": job_id, "cost_record_id": cost.cost_record_id, "amount": cost.amount})
         return self._record_for("renovation_job_costs", cost.cost_record_id)
 
-    def list_costs(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
-        return self._list_by(ctx, "renovation_job_costs", "job_id", job_id)
+    def list_costs(self, ctx: TenantContext, job_id: str, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list_by(ctx, "renovation_job_costs", "job_id", job_id, filters)
 
     def profitability(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
         scorecard = self.service.job_profitability(ctx, job_id)
@@ -251,8 +254,11 @@ class RenovationOperatorCockpit:
         self._event(ctx, "renovation.operator.invoice.created", invoice.invoice_id, {"job_id": job_id, "invoice_id": invoice.invoice_id, "total": invoice.total})
         return self._record_for("renovation_invoices", invoice.invoice_id)
 
-    def list_invoices(self, ctx: TenantContext, job_id: str) -> dict[str, object]:
-        return self._list_by(ctx, "renovation_invoices", "job_id", job_id)
+    def list_invoices(self, ctx: TenantContext, job_id: str, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list_by(ctx, "renovation_invoices", "job_id", job_id, filters)
+
+    def list_all_invoices(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_invoices", filters)
 
     def record_payment(self, ctx: TenantContext, invoice_id: str, payload: dict[str, object]) -> dict[str, object]:
         invoice = self.service.pay_invoice(ctx, invoice_id, payload)
@@ -363,8 +369,8 @@ class RenovationOperatorCockpit:
             self._event(ctx, "renovation.operator.provider.failed", notification_id, {"provider_type": "notification", "failure_reason": result.get("failure_reason")})
         return record
 
-    def list_notifications(self, ctx: TenantContext) -> dict[str, object]:
-        return self._list(ctx, "renovation_notifications")
+    def list_notifications(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_notifications", filters)
 
     def validate_provider(self, ctx: TenantContext, provider_type: str, payload: dict[str, object]) -> dict[str, object]:
         if provider_type == "notification":
@@ -423,6 +429,9 @@ class RenovationOperatorCockpit:
         self.persistence.put("renovation_payment_statuses", status_id, record)
         self._event(ctx, "renovation.operator.payment_status.updated", invoice_id, {"invoice_id": invoice_id, "payment_status": status})
         return record
+
+    def list_payment_statuses(self, ctx: TenantContext, filters: dict[str, object] | None = None) -> dict[str, object]:
+        return self._list(ctx, "renovation_payment_statuses", filters)
 
     def payment_webhook(self, ctx: TenantContext, payload: dict[str, object]) -> dict[str, object]:
         validation = self.payment_provider.validate_webhook(payload)
@@ -485,13 +494,74 @@ class RenovationOperatorCockpit:
     def _artifact(self, ctx: TenantContext, collection: str, key: str) -> dict[str, object]:
         return self._tenant_record(ctx, collection, key)
 
-    def _list(self, ctx: TenantContext, collection: str) -> dict[str, object]:
+    def _list(self, ctx: TenantContext, collection: str, filters: dict[str, object] | None = None) -> dict[str, object]:
         items = self.persistence.list_tenant(collection, ctx.tenant_id)
-        return {"items": items, "total": len(items)}
+        return self._filter_page(items, filters)
 
-    def _list_by(self, ctx: TenantContext, collection: str, field: str, value: str) -> dict[str, object]:
-        items = [item for item in self.persistence.list_tenant(collection, ctx.tenant_id) if item.get(field) == value or dict(item.get("artifact", {})).get(field) == value]
-        return {"items": items, "total": len(items)}
+    def _list_by(
+        self,
+        ctx: TenantContext,
+        collection: str,
+        field: str,
+        value: str,
+        filters: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        items = [
+            item
+            for item in self.persistence.list_tenant(collection, ctx.tenant_id)
+            if item.get(field) == value or dict(item.get("artifact", {})).get(field) == value
+        ]
+        return self._filter_page(items, filters)
+
+    def _filter_page(self, items: list[dict[str, object]], filters: dict[str, object] | None = None) -> dict[str, object]:
+        filters = filters or {}
+        search = str(filters.get("search", "") or "").strip().lower()
+        status = str(filters.get("status", "") or "").strip().lower()
+        customer_id = str(filters.get("customer_id", "") or "").strip()
+        date_from = str(filters.get("date_from", "") or "").strip()
+        date_to = str(filters.get("date_to", "") or "").strip()
+        if search:
+            items = [item for item in items if search in json.dumps(item, sort_keys=True, default=str).lower()]
+        if status:
+            items = [
+                item
+                for item in items
+                if str(item.get("status") or dict(item.get("artifact", {})).get("status") or "").lower() == status
+            ]
+        if customer_id:
+            items = [item for item in items if str(dict(item.get("artifact", {})).get("customer_id", "")) == customer_id]
+        if date_from or date_to:
+            items = [item for item in items if self._record_in_date_range(item, date_from, date_to)]
+        total = len(items)
+        limit = max(1, min(int(filters.get("limit", 50) or 50), 200))
+        offset = max(0, int(filters.get("offset", 0) or 0))
+        paged = items[offset : offset + limit]
+        next_offset = offset + limit if offset + limit < total else None
+        applied = {
+            "search": search,
+            "status": status,
+            "customer_id": customer_id,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+        return {"items": paged, "total": total, "limit": limit, "offset": offset, "next_offset": next_offset, "filters": applied}
+
+    def _record_in_date_range(self, item: dict[str, object], date_from: str, date_to: str) -> bool:
+        artifact = dict(item.get("artifact", {}))
+        candidates = [
+            item.get("created_at"),
+            item.get("updated_at"),
+            artifact.get("created_date"),
+            artifact.get("invoice_date"),
+            artifact.get("due_date"),
+            artifact.get("start_date"),
+            artifact.get("cost_date"),
+            artifact.get("payment_date"),
+        ]
+        values = [str(value)[:10] for value in candidates if value]
+        if not values:
+            return False
+        return any((not date_from or value >= date_from) and (not date_to or value <= date_to) for value in values)
 
     def _event(self, ctx: TenantContext, event_type: str, aggregate_id: str, payload: dict[str, object]) -> None:
         self.event_store.append(event_type, aggregate_id, {"tenant_id": ctx.tenant_id, "organization_id": ctx.organization_id, "actor_id": ctx.principal_id, **payload})
