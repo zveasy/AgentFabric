@@ -704,7 +704,7 @@ def _renovation_app_html_legacy() -> str:
 </html>"""
 
 
-def _renovation_app_html() -> str:
+def _renovation_app_html_scroll_legacy() -> str:
     return """<!doctype html>
 <html lang="en">
 <head>
@@ -1766,6 +1766,532 @@ Flooring replacement</textarea>
     }
     loadCockpit();
     refreshRuns();
+  </script>
+</body>
+</html>"""
+
+
+def _renovation_app_html() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RenovationOS</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --shell: #ffffff;
+      --panel: #ffffff;
+      --soft: #f1f5f9;
+      --line: #dfe6ee;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --accent: #08765f;
+      --accent-strong: #075e4d;
+      --blue: #2563eb;
+      --green: #138a55;
+      --orange: #c45f0b;
+      --red: #c62828;
+      --purple: #7c3aed;
+      --amber: #d97706;
+      --shadow: 0 18px 48px rgba(15, 23, 42, .09);
+      --shadow-soft: 0 8px 24px rgba(15, 23, 42, .06);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .app { display: grid; grid-template-columns: 292px minmax(0, 1fr); min-height: 100vh; transition: grid-template-columns .18s ease; }
+    .app.collapsed { grid-template-columns: 92px minmax(0, 1fr); }
+    .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 18px; border-bottom: 1px solid var(--line); font-weight: 850; font-size: 18px; }
+    .brand-mark, .avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(135deg, #08765f, #10b981); color: white; font-weight: 900; box-shadow: 0 8px 20px rgba(8,118,95,.22); }
+    .collapse-btn { margin-left: auto; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--muted); cursor: pointer; }
+    .workspace { margin: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(180deg,#ffffff,#f8fbff); box-shadow: var(--shadow-soft); }
+    .workspace-row { display: flex; gap: 10px; align-items: center; }
+    .workspace-logo { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: #e7f3f0; color: var(--accent); font-weight: 900; }
+    .workspace strong { display: block; font-size: 13px; }
+    .workspace span { color: var(--muted); font-size: 12px; }
+    .workspace-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--muted); font-size: 11px; font-weight: 750; }
+    .online-dot { width: 7px; height: 7px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 0 3px #dcfce7; }
+    .nav { padding: 0 10px 16px; overflow-y: auto; }
+    .nav-group { margin: 14px 8px 8px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .nav button { position: relative; width: 100%; display: flex; align-items: center; gap: 11px; border: 0; border-radius: 12px; padding: 10px 12px; background: transparent; color: #334155; font: inherit; font-size: 14px; cursor: pointer; text-align: left; transition: background .16s ease, color .16s ease, transform .16s ease; }
+    .nav button:hover { background: var(--soft); transform: translateX(2px); }
+    .nav button.active { background: #e7f3f0; color: var(--accent-strong); font-weight: 800; }
+    .nav button.active::before { content: ""; position: absolute; left: -10px; width: 3px; height: 24px; border-radius: 99px; background: var(--accent); }
+    .nav .ico { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: white; font-size: 14px; font-weight: 800; }
+    .nav-badge { margin-left: auto; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 6px; border-radius: 999px; background: #fee2e2; color: var(--red); font-size: 11px; font-weight: 900; }
+    .sidebar-foot { margin-top: auto; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .main { min-width: 0; }
+    .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 14px 28px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.92); backdrop-filter: blur(14px); }
+    .search { flex: 1; max-width: 680px; position: relative; }
+    .search input { width: 100%; height: 42px; border: 1px solid var(--line); border-radius: 11px; padding: 0 44px 0 16px; font: inherit; background: white; }
+    .kbd { position: absolute; right: 10px; top: 9px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 12px; }
+    .top-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .btn { border: 1px solid transparent; border-radius: 10px; padding: 10px 13px; background: var(--accent); color: white; font-weight: 750; cursor: pointer; }
+    .btn:hover { background: var(--accent-strong); }
+    .btn.secondary { background: white; color: var(--ink); border-color: var(--line); }
+    .btn.subtle { background: var(--soft); color: var(--ink); border-color: var(--line); }
+    .avatar { width: 38px; height: 38px; border-radius: 999px; }
+    .content { max-width: 1560px; margin: 0 auto; padding: 30px; }
+    .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
+    .page-head h1 { margin: 0; font-size: 34px; line-height: 1.08; letter-spacing: -.02em; }
+    .page-head p { margin: 8px 0 0; color: var(--muted); }
+    .view { display: none; }
+    .view.active { display: block; animation: fadeIn .2s ease both; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 24px; }
+    .card, .table-card, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-soft); transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+    .card:hover, .panel:hover, .table-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: #cbd5e1; }
+    .card { padding: 18px; min-height: 132px; overflow: hidden; position: relative; }
+    .card-top { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; font-weight: 750; }
+    .card strong { display: block; margin-top: 14px; font-size: 27px; letter-spacing: -.02em; }
+    .trend { display: block; margin-top: 10px; color: var(--green); font-size: 12px; font-weight: 750; }
+    .trend.warn { color: var(--orange); }
+    .trend.bad { color: var(--red); }
+    .kpi-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
+    .kpi-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: #eef8f5; font-size: 18px; }
+    .sparkline { display: flex; align-items: end; gap: 3px; height: 28px; margin-top: 12px; }
+    .sparkline i { flex: 1; border-radius: 99px 99px 3px 3px; background: rgba(8,118,95,.28); min-height: 7px; }
+    .sparkline.blue i { background: rgba(37,99,235,.25); }
+    .sparkline.warn i { background: rgba(217,119,6,.28); }
+    .sparkline.bad i { background: rgba(198,40,40,.24); }
+    .dash-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr); gap: 24px; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) 360px; gap: 24px; margin-bottom: 24px; }
+    .ai-hero { min-height: 250px; padding: 26px; background: radial-gradient(circle at top right, rgba(16,185,129,.22), transparent 32%), linear-gradient(135deg, #0f172a, #0b3b35); color: white; border: 0; box-shadow: 0 24px 70px rgba(15,23,42,.22); }
+    .ai-hero h2 { margin: 0; font-size: 32px; letter-spacing: -.02em; }
+    .ai-hero p { color: rgba(255,255,255,.72); }
+    .hero-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+    .hero-stat { padding: 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(255,255,255,.08); }
+    .hero-stat strong { display: block; font-size: 22px; }
+    .priority-list { display: grid; gap: 10px; margin-top: 20px; }
+    .priority-list div { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.09); }
+    .quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-top: 15px; }
+    .quick-grid button { justify-content: flex-start; text-align: left; }
+    .stack { display: grid; gap: 24px; }
+    .panel { padding: 18px; }
+    .panel h2, .table-card h2 { margin: 0; font-size: 17px; }
+    .panel-sub { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .segment { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: #f8fafc; }
+    .segment button { border: 0; border-radius: 999px; padding: 6px 10px; background: transparent; color: var(--muted); font-weight: 800; cursor: pointer; }
+    .segment button.active { background: white; color: var(--ink); box-shadow: var(--shadow-soft); }
+    .chart { height: 280px; margin-top: 18px; display: grid; align-items: end; grid-template-columns: repeat(6, 1fr); gap: 14px; border-bottom: 1px solid var(--line); padding: 0 10px 20px; }
+    .bar { border-radius: 10px 10px 4px 4px; background: linear-gradient(180deg, #21a67a, #0b6b57); min-height: 35px; position: relative; }
+    .bar.alt { background: linear-gradient(180deg, #70a7ff, #2563eb); }
+    .bar span { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; }
+    .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .toolbar input, .toolbar select { height: 38px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; font: inherit; background: white; }
+    .table-card { overflow: hidden; }
+    .table-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px; border-bottom: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 13px 18px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); background: #fbfdff; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    tbody tr:hover { background: #fbfdff; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 800; background: #eef2f7; color: #475569; text-transform: capitalize; }
+    .badge.good { background: #e4f7ec; color: var(--green); }
+    .badge.warn { background: #fff4df; color: var(--orange); }
+    .badge.bad { background: #ffe8e8; color: var(--red); }
+    .empty { padding: 18px; border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; color: var(--muted); }
+    .empty.onboarding { color: var(--ink); background: linear-gradient(180deg,#ffffff,#f8fbff); border-style: solid; }
+    .empty-steps { display: grid; gap: 8px; margin: 12px 0; color: var(--muted); }
+    .attention { display: grid; gap: 10px; margin-top: 14px; }
+    .attention-item { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .status-dot { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #eef2ff; color: var(--blue); font-weight: 900; }
+    .status-dot.bad { background: #ffe8e8; color: var(--red); }
+    .status-dot.warn { background: #fff4df; color: var(--orange); }
+    .kanban { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 14px; }
+    .lane { min-height: 220px; border: 1px solid var(--line); border-radius: 14px; background: #fbfdff; padding: 12px; }
+    .lane h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .mini-card { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: white; margin-bottom: 10px; }
+    .mini-card strong { display: block; }
+    .mini-card span { color: var(--muted); font-size: 12px; }
+    .job-cards { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; padding: 18px; }
+    .job-card { border: 1px solid var(--line); border-radius: 15px; padding: 15px; background: linear-gradient(180deg,#ffffff,#fbfdff); }
+    .job-meta { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+    .progress { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-top: 12px; }
+    .progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--accent),#22c55e); animation: grow .5s ease both; }
+    .integration-grid, .settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .integration-card { padding: 18px; }
+    .integration-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: #eef8f5; color: var(--accent); font-weight: 900; margin-bottom: 14px; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .tab { border: 1px solid var(--line); background: white; border-radius: 999px; padding: 8px 12px; font-weight: 750; color: var(--muted); }
+    dialog { border: 0; border-radius: 18px; padding: 0; box-shadow: 0 25px 80px rgba(15,23,42,.25); width: min(560px, calc(100vw - 32px)); }
+    dialog::backdrop { background: rgba(15, 23, 42, .32); backdrop-filter: blur(3px); }
+    .modal { padding: 22px; }
+    .modal h2 { margin: 0 0 8px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+    .modal input, .modal select, .modal textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; }
+    .full { grid-column: 1 / -1; }
+    .error { color: var(--red); }
+    .success { color: var(--green); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+    .readiness-hero { display: grid; place-items: center; text-align: center; min-height: 220px; background: linear-gradient(135deg,#f8fafc,#e7f3f0); }
+    .readiness-score { display: grid; place-items: center; width: 132px; height: 132px; border-radius: 999px; background: conic-gradient(var(--accent) var(--ready, 68%), #e2e8f0 0); margin: 0 auto 14px; }
+    .readiness-score strong { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 999px; background: white; font-size: 28px; }
+    .skeleton { position: relative; overflow: hidden; background: #e2e8f0; border-radius: 10px; min-height: 18px; }
+    .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: shimmer 1.2s infinite; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @keyframes grow { from { width: 0; } }
+    @keyframes shimmer { to { transform: translateX(100%); } }
+    .app.collapsed .brand span, .app.collapsed .workspace, .app.collapsed .nav button span.label, .app.collapsed .sidebar-foot, .app.collapsed .nav-badge { display: none; }
+    .app.collapsed .nav button { justify-content: center; }
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 86px minmax(0,1fr); }
+      .brand span, .workspace, .nav-group, .nav button span.label, .sidebar-foot { display: none; }
+      .nav button { justify-content: center; }
+      .dash-grid, .workspace-grid { grid-template-columns: 1fr; }
+      .hero-grid { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .integration-grid, .settings-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 700px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+      .nav { display: grid; grid-template-columns: repeat(3, 1fr); }
+      .topbar { flex-wrap: wrap; padding: 14px; }
+      .content { padding: 18px; }
+      .kpis, .integration-grid, .settings-grid, .kanban, .hero-stats, .job-cards { grid-template-columns: 1fr; }
+      .modal-grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sr-only">Operator cockpit /renovation/integrations Required setup</div>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">R</div><span>RenovationOS</span><button class="collapse-btn" id="collapse-sidebar" title="Collapse sidebar">☰</button></div>
+      <div class="workspace">
+        <div class="workspace-row"><div class="workspace-logo">RO</div><div><strong>RenovationOS Demo Co.</strong><span>Contractor workspace</span></div></div>
+        <div class="workspace-meta"><span class="pill"><span class="online-dot"></span>Online</span><span class="pill">Pro Trial</span><span class="pill">operator-a</span></div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">Local Demo Workspace<br>SQLite persistence</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="search"><input id="global-search" placeholder="Search customers, jobs, invoices, leads..."><span class="kbd">⌘K</span></div>
+        <div class="top-actions">
+          <button class="btn secondary" id="connect">Connect</button>
+          <button class="btn" id="new-button">+ New</button>
+          <div><strong id="principal-label">operator-a</strong><div class="panel-sub" id="role-label">Operator</div></div>
+          <div class="avatar">O</div>
+        </div>
+      </header>
+      <section class="content">
+        <div class="page-head">
+          <div><h1 id="page-title">Dashboard</h1><p id="page-subtitle">Overview of your business and operations.</p></div>
+          <div><span id="status" class="success"></span><span id="error" class="error"></span></div>
+        </div>
+
+        <section class="view active" data-view="dashboard">
+          <div class="hero-grid">
+            <div class="panel ai-hero">
+              <h2 id="greeting">Good Morning, Zak</h2>
+              <p>RenovationOS has analyzed today's workload and prioritized the work most likely to affect cash, schedule, and customer experience.</p>
+              <div class="hero-stats" id="hero-stats"></div>
+              <div class="priority-list" id="ai-priorities"><div><span>●</span><span class="skeleton"></span></div></div>
+            </div>
+            <div class="panel"><h2>Quick Actions</h2><p class="panel-sub">Start the next contractor workflow without hunting through menus.</p><div class="quick-grid" id="quick-actions"></div></div>
+          </div>
+          <div class="kpis" id="kpis"></div>
+          <div class="dash-grid">
+            <div class="stack">
+              <div class="panel"><div class="table-head"><div><h2>Revenue Command Center</h2><p class="panel-sub">Revenue, profit, invoices, and receivables by period.</p></div><div class="segment"><button class="active">Month</button><button>Quarter</button><button>Year</button></div></div><div class="chart" id="revenue-chart"></div></div>
+              <div class="table-card"><div class="table-head"><div><h2>Active Jobs</h2><p class="panel-sub">Progress, budget, crew, due date, and priority.</p></div><button class="btn subtle" data-nav-target="jobs">View all jobs</button></div><div class="job-cards" id="active-jobs"></div></div>
+              <div class="panel"><h2>Pipeline Overview</h2><p class="panel-sub">Where revenue is sitting right now.</p><div class="kanban" id="pipeline-overview"></div></div>
+            </div>
+            <div class="stack">
+              <div class="panel"><h2>Needs Attention</h2><div class="attention" id="needs-attention"></div></div>
+              <div class="panel"><h2>Upcoming Schedule</h2><div class="attention" id="upcoming-schedule"></div></div>
+              <div class="panel"><h2>Recent Activity</h2><div class="attention" id="recent-activity"></div></div>
+              <div class="panel"><h2>Integration Health</h2><div class="attention" id="integration-health"></div></div>
+              <div class="panel"><h2>Operator Summary</h2><div id="operator-summary" class="panel-sub"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-view="leads"><div class="workspace-grid"><div class="stack"><div class="toolbar"><input id="lead-search" placeholder="Search leads"><select id="lead-status"><option value="">Any status</option><option value="new">New</option><option value="contacted">Contacted</option><option value="won">Won</option></select><button class="btn subtle" data-refresh="leads">Filter Leads</button><button class="btn" data-new-type="lead">New Lead</button></div><div class="kanban" id="lead-kanban"></div><div class="table-card"><div class="table-head"><h2>Lead Table</h2></div><table><thead><tr><th>Lead</th><th>Status</th><th>Project</th><th>Next action</th></tr></thead><tbody id="leads-table"></tbody></table></div></div><aside class="panel"><h2>Conversion Workflow</h2><p class="panel-sub">Prioritize unconverted leads, create estimates, and move won leads into jobs.</p><div id="lead-summary" class="attention"></div></aside></div></section>
+        <section class="view" data-view="customers"><div class="workspace-grid"><div class="table-card"><div class="table-head"><h2>Customer List</h2><div class="toolbar"><input id="customer-search" placeholder="Search customers"><button class="btn subtle" data-refresh="customers">Apply</button><button class="btn" data-new-type="customer">New Customer</button></div></div><table><thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th>Active projects</th></tr></thead><tbody id="customers-table"></tbody></table></div><aside class="panel"><h2>Customer Profile</h2><div id="customer-profile" class="attention"></div></aside></div></section>
+        <section class="view" data-view="estimates"><div class="workspace-grid"><div class="table-card"><div class="table-head"><h2>Estimate Builder</h2><button class="btn" data-new-type="estimate">New Estimate</button></div><table><thead><tr><th>Estimate</th><th>Status</th><th>Total</th><th>Margin preview</th></tr></thead><tbody id="estimates-table"></tbody></table></div><aside class="panel"><h2>Builder Preview</h2><div class="attention" id="estimate-builder"></div></aside></div></section>
+        <section class="view" data-view="proposals"><div class="table-card"><div class="table-head"><h2>Proposal List</h2><button class="btn subtle">Send selected</button></div><table><thead><tr><th>Proposal</th><th>Status</th><th>Customer</th><th>Total</th><th>Actions</th></tr></thead><tbody id="proposals-table"></tbody></table></div></section>
+        <section class="view" data-view="jobs"><div class="workspace-grid"><div class="stack"><div class="toolbar"><input id="job-search" placeholder="Search jobs"><select id="job-status"><option value="">Any status</option><option value="planned">Planned</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option></select><button class="btn subtle" data-refresh="jobs">Apply</button><button class="btn" data-new-type="job">New Job</button></div><div class="kanban" id="job-board"></div><div class="table-card"><div class="table-head"><h2>Job Table</h2></div><table><thead><tr><th>Job</th><th>Status</th><th>Project</th><th>Customer</th></tr></thead><tbody id="jobs-table"></tbody></table></div></div><aside class="panel"><h2>Job Details</h2><div id="job-details" class="attention"></div></aside></div></section>
+        <section class="view" data-view="schedule"><div class="workspace-grid"><div class="panel"><h2>Calendar View</h2><div class="attention" id="calendar-list"></div></div><aside class="panel"><h2>Sync Status</h2><div id="calendar-sync" class="attention"></div></aside></div></section>
+        <section class="view" data-view="invoices"><div class="table-card"><div class="table-head"><h2>Invoice Table</h2><div class="toolbar"><select id="invoice-status"><option value="">All invoices</option><option value="paid">Paid</option><option value="partial">Partial</option></select><button class="btn" data-new-type="invoice">New Invoice</button></div></div><table><thead><tr><th>Invoice</th><th>Job</th><th>Total</th><th>Outstanding</th><th>Actions</th></tr></thead><tbody id="invoices-table"></tbody></table></div></section>
+        <section class="view" data-view="payments"><div class="workspace-grid"><div class="table-card"><div class="table-head"><h2>Payment History</h2></div><table><thead><tr><th>Invoice</th><th>Status</th><th>Provider ref</th><th>Received</th></tr></thead><tbody id="payments-table"></tbody></table></div><aside class="panel"><h2>Payment Analytics</h2><div id="payment-analytics" class="attention"></div></aside></div></section>
+        <section class="view" data-view="files"><div class="workspace-grid"><div class="panel"><h2>Drag-and-drop Upload</h2><div class="empty">Drop files here or upload from a record profile. Version history and previews are ready for the next pass.</div></div><div class="table-card"><div class="table-head"><h2>Files</h2></div><table><thead><tr><th>File</th><th>Record</th><th>Size</th><th>Status</th></tr></thead><tbody id="files-table"></tbody></table></div></div></section>
+        <section class="view" data-view="analytics"><div class="kpis" id="analytics-kpis"></div><div class="panel"><h2>Financial Analytics</h2><div class="chart" id="analytics-chart"></div></div></section>
+        <section class="view" data-view="integrations"><div class="integration-grid" id="integration-cards"></div></section>
+        <section class="view" data-view="settings"><div class="tabs" id="settings-tabs"></div><div class="settings-grid" id="settings-panels"></div></section>
+        <section class="view" data-view="readiness"><div class="workspace-grid"><div class="panel"><h2>Production Readiness</h2><div id="readiness-list" class="attention"></div></div><aside class="panel"><h2>Missing Capabilities</h2><div id="missing-capabilities" class="attention"></div></aside></div></section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="new-dialog"><div class="modal"><h2>Create Record</h2><p class="panel-sub">Fast actions for common contractor workflows.</p><div class="modal-grid"><select id="new-type"><option value="lead">Lead</option><option value="customer">Customer</option><option value="estimate">Estimate</option><option value="proposal">Proposal</option><option value="job">Job</option><option value="invoice">Invoice</option><option value="payment">Payment</option><option value="schedule">Schedule Visit</option><option value="file">Upload Documents</option></select><input id="new-name" placeholder="Name or description"><input id="new-email" placeholder="Email"><input id="new-amount" type="number" placeholder="Amount"><textarea id="new-notes" class="full" placeholder="Notes"></textarea></div><div class="toolbar"><button class="btn" id="create-record">Create</button><button class="btn secondary" id="close-dialog">Cancel</button></div></div></dialog>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {token: localStorage.getItem("renovation_access_token") || "", view: "dashboard", data: {}};
+    const nav = [
+      ["dashboard", "⌂", "Dashboard", "Overview and priorities."],
+      ["leads", "◇", "Leads", "Pipeline and conversion workflow."],
+      ["customers", "◎", "Customers", "Profiles, projects, notes, and files."],
+      ["estimates", "▤", "Estimates", "Builder, line items, tax, and margin."],
+      ["proposals", "□", "Proposals", "PDFs, acceptance, and revisions."],
+      ["jobs", "⌘", "Jobs", "Board, milestones, costs, and portal."],
+      ["schedule", "◷", "Schedule", "Calendar, deliveries, inspections."],
+      ["invoices", "▥", "Invoices", "Outstanding invoices and PDFs."],
+      ["payments", "$", "Payments", "Payment history and failures."],
+      ["files", "▣", "Files", "Uploads, previews, and versions."],
+      ["analytics", "↗", "Analytics", "Financial and operational trends."],
+      ["integrations", "⌁", "Integrations", "Providers and health checks."],
+      ["settings", "⚙", "Settings", "Company, users, roles, security."],
+      ["readiness", "◈", "Readiness", "Production checklist."]
+    ];
+    const money = (value) => `$${Number(value || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+    const pct = (value) => `${Number(value || 0).toFixed(1)}%`;
+    const artifact = (record) => record?.artifact || record || {};
+    const escMap = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => escMap[ch]);
+    function badge(status) {
+      const text = String(status || "unknown").replaceAll("_", " ");
+      const normalized = text.toLowerCase();
+      const cls = ["paid","accepted","approved","active","completed","synced","ready","connected"].includes(normalized) ? "good" : ["planned","new","partial","stub","local stub","test mode"].includes(normalized) ? "warn" : ["failed","overdue","at risk","on hold","missing"].includes(normalized) ? "bad" : "";
+      return `<span class="badge ${cls}">${esc(text)}</span>`;
+    }
+    function line(icon, title, detail, action = "") {
+      return `<div class="attention-item"><div class="status-dot">${icon}</div><div><strong>${esc(title)}</strong><div class="panel-sub">${esc(detail)}</div></div><div>${action}</div></div>`;
+    }
+    function onboarding(title, steps, action, type = "lead") {
+      return `<div class="empty onboarding"><strong>${esc(title)}</strong><div class="empty-steps">${steps.map((step) => `<div>→ ${esc(step)}</div>`).join("")}</div><button class="btn" data-new-type="${type}">${esc(action)}</button></div>`;
+    }
+    async function api(path, options = {}) {
+      const headers = {"Content-Type": "application/json", ...(options.headers || {})};
+      if (state.token) headers.Authorization = `Bearer ${state.token}`;
+      const res = await fetch(path, {...options, headers});
+      const type = res.headers.get("content-type") || "";
+      const data = type.includes("json") ? await res.json() : await res.text();
+      if (!res.ok) throw new Error(data?.error?.message || data?.detail || "Request failed");
+      return data;
+    }
+    async function connect() {
+      const principal = "operator-a";
+      try {
+        let issued = await fetch("/auth/token/issue", {method: "POST", headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": "bootstrap-dev"}, body: JSON.stringify({principal_id: principal})});
+        if (issued.status === 404) {
+          await fetch("/auth/principals/register", {method: "POST", headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": "bootstrap-dev"}, body: JSON.stringify({principal_id: principal, tenant_id: "tenant-a", role: "owner", scopes: []})});
+          issued = await fetch("/auth/token/issue", {method: "POST", headers: {"Content-Type": "application/json", "X-AgentFabric-Bootstrap-Token": "bootstrap-dev"}, body: JSON.stringify({principal_id: principal})});
+        }
+        const token = await issued.json();
+        if (!issued.ok) throw new Error(token?.error?.message || "Could not connect workspace");
+        state.token = token.access_token;
+        localStorage.setItem("renovation_access_token", state.token);
+        await api("/tenants", {method: "POST", body: JSON.stringify({tenant_id: "tenant-a", organization_id: "org-a", name: "Tenant A", billing_plan: "enterprise"})}).catch(() => undefined);
+        $("status").textContent = "Workspace connected.";
+        await load();
+      } catch (err) { $("error").textContent = err.message; }
+    }
+    function renderNav() {
+      const d = state.data || {};
+      const badges = {leads: d.leads?.total || 0, jobs: d.metrics?.jobs_at_risk || 0, invoices: (d.metrics?.outstanding_receivables || 0) > 0 ? "!" : "", readiness: d.readiness?.missing_production_capabilities?.length || 0};
+      $("nav").innerHTML = nav.map(([key, icon, label]) => `<button data-view="${key}" class="${key === state.view ? "active" : ""}"><span class="ico">${icon}</span><span class="label">${label}</span>${badges[key] ? `<span class="nav-badge">${badges[key]}</span>` : ""}</button>`).join("");
+      document.querySelectorAll("#nav [data-view]").forEach((button) => button.addEventListener("click", () => show(button.dataset.view)));
+    }
+    function show(view) {
+      state.view = view;
+      const item = nav.find(([key]) => key === view) || nav[0];
+      document.querySelectorAll(".view").forEach((node) => node.classList.toggle("active", node.dataset.view === view));
+      document.querySelectorAll(".nav button").forEach((node) => node.classList.toggle("active", node.dataset.view === view));
+      $("page-title").textContent = item[2];
+      $("page-subtitle").textContent = item[3];
+    }
+    async function load() {
+      try {
+        const leadQuery = new URLSearchParams({search: $("lead-search")?.value || "", status: $("lead-status")?.value || "", limit: 100});
+        const jobQuery = new URLSearchParams({search: $("job-search")?.value || "", status: $("job-status")?.value || "", limit: 100});
+        const customerQuery = new URLSearchParams({search: $("customer-search")?.value || "", limit: 100});
+        const [metrics, readiness, integrations, customers, leads, estimates, proposals, jobs, schedule, invoices, payments, files, notifications, account] = await Promise.all([
+          api("/renovation/metrics"), api("/renovation/readiness"), api("/renovation/integrations"),
+          api(`/renovation/customers?${customerQuery}`), api(`/renovation/leads?${leadQuery}`),
+          api("/renovation/estimates?limit=100"), api("/renovation/proposals?limit=100"), api(`/renovation/jobs?${jobQuery}`),
+          api("/renovation/schedule?limit=100"), api("/renovation/invoices?limit=100"), api("/renovation/payments?limit=100"),
+          api("/renovation/files"), api("/renovation/notifications"), api("/renovation/account")
+        ]);
+        state.data = {metrics, readiness, integrations, customers, leads, estimates, proposals, jobs, schedule, invoices, payments, files, notifications, account};
+        $("principal-label").textContent = account.principal_id || "operator-a";
+        $("role-label").textContent = account.role || "Operator";
+        renderNav();
+        renderAll();
+      } catch (err) {
+        $("error").textContent = err.message;
+      }
+    }
+    function renderAll() {
+      const d = state.data;
+      renderKpis(d.metrics, d.leads, d.invoices, d.schedule);
+      renderDashboard(d);
+      renderLeads(d.leads);
+      renderCustomers(d.customers);
+      renderEstimates(d.estimates);
+      renderProposals(d.proposals);
+      renderJobs(d.jobs);
+      renderSchedule(d.schedule);
+      renderInvoices(d.invoices);
+      renderPayments(d.payments);
+      renderFiles(d.files);
+      renderIntegrations(d.integrations);
+      renderSettings(d.account);
+      renderReadiness(d.readiness);
+      renderAnalytics(d.metrics);
+    }
+    function renderKpis(metrics, leads, invoices, schedule) {
+      const conversion = metrics.total_leads ? metrics.converted_leads / metrics.total_leads * 100 : 0;
+      const outstanding = metrics.outstanding_receivables || 0;
+      const upcoming = (invoices.items || []).filter((record) => Number(artifact(record).outstanding_balance || 0) > 0).length;
+      const cards = [
+        ["Total Revenue", money(metrics.invoiced_revenue), "▲ +12% vs last period", "◎", "good", [35,48,55,71,65,86]],
+        ["Outstanding Receivables", money(outstanding), `${upcoming} upcoming payments`, "▥", outstanding ? "warn" : "good", [42,40,52,46,59,62]],
+        ["Active Jobs", metrics.active_jobs, `${metrics.jobs_at_risk} at risk`, "⌘", metrics.jobs_at_risk ? "warn" : "good", [20,36,44,58,74,80]],
+        ["Jobs At Risk", metrics.jobs_at_risk, "Needs review", "!", metrics.jobs_at_risk ? "bad" : "good", [25,28,22,20,18,16]],
+        ["New Leads", leads.total || 0, `${metrics.converted_leads} converted`, "◇", "good", [18,35,32,48,66,78]],
+        ["Gross Margin", pct(metrics.gross_margin_percentage), "+2.1% margin trend", "↗", "good", [45,44,51,56,62,68]],
+        ["Conversion Rate", pct(conversion), "Lead to customer", "→", "good", [18,24,35,38,51,57]],
+        ["Upcoming Payments", upcoming, "Open receivables", "$", upcoming ? "warn" : "good", [30,42,38,52,49,61]]
+      ];
+      $("kpis").innerHTML = cards.map(([label, value, trend, icon, cls, points]) => `<div class="card kpi-card" style="--accent:${cls === "bad" ? "var(--red)" : cls === "warn" ? "var(--amber)" : "var(--accent)"}"><div class="card-top"><span>${label}</span><span class="kpi-icon">${icon}</span></div><strong>${value}</strong><span class="trend ${cls === "bad" ? "bad" : cls === "warn" ? "warn" : ""}">${trend}</span><div class="sparkline ${cls === "warn" ? "warn" : cls === "bad" ? "bad" : ""}">${points.map((p) => `<i style="height:${p}%"></i>`).join("")}</div></div>`).join("");
+    }
+    function renderDashboard(d) {
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
+      $("greeting").textContent = `${greeting}, Zak`;
+      $("hero-stats").innerHTML = [
+        ["Active projects", d.metrics.active_jobs || 0],
+        ["Expected revenue", money(d.metrics.estimated_revenue || 0)],
+        ["Need attention", d.metrics.jobs_at_risk || 0],
+        ["Overdue invoices", (d.invoices.items || []).filter((record) => Number(artifact(record).outstanding_balance || 0) > 0).length]
+      ].map(([label, value]) => `<div class="hero-stat"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join("");
+      const priorities = d.readiness.operator_summary?.messages?.length ? d.readiness.operator_summary.messages : ["Create a lead, build an estimate, send a proposal, and start your first job from Quick Actions."];
+      $("ai-priorities").innerHTML = priorities.slice(0, 5).map((msg, i) => `<div><span>${i === 0 ? "●" : "○"}</span><span>${esc(msg)}</span></div>`).join("");
+      $("quick-actions").innerHTML = [
+        ["New Lead","lead"],["Customer","customer"],["Estimate","estimate"],["Proposal","proposal"],["Job","job"],["Invoice","invoice"],["Payment","payment"],["Schedule Visit","schedule"],["Upload Documents","file"]
+      ].map(([label, type]) => `<button class="btn ${type === "lead" ? "" : "secondary"}" data-new-type="${type}">+ ${esc(label)}</button>`).join("");
+      $("revenue-chart").innerHTML = [42,58,67,62,78,88].map((h, i) => `<div class="bar ${i % 2 ? "alt" : ""}" style="height:${h}%"><span>${["Feb","Mar","Apr","May","Jun","Jul"][i]}</span></div>`).join("");
+      renderActiveJobCards(d.jobs.items || []);
+      $("needs-attention").innerHTML = priorities.map((msg, i) => line(i ? "!" : "1", "Priority", msg, "")).join("");
+      $("operator-summary").textContent = (d.readiness.operator_summary?.messages || ["No urgent operator follow-up found."]).join(" ");
+      $("upcoming-schedule").innerHTML = (d.schedule.items || []).slice(0, 5).map((record) => { const item = artifact(record); return line("◷", item.title || item.start_date || "Schedule item", `${item.job_id || "Job"} ${item.status || ""}`); }).join("") || onboarding("Schedule Your First Visit", ["Create a customer", "Open the job workspace", "Add an inspection, delivery, or crew visit"], "Schedule Visit", "schedule");
+      $("recent-activity").innerHTML = (d.notifications.items || []).slice(0, 5).map((record) => { const item = artifact(record); return line("●", item.payload?.event_type || item.record_type || "Activity", `${item.status || "Recorded"} · local workspace`); }).join("") || onboarding("Activity Will Appear Here", ["Send proposals", "Record payments", "Update job status"], "Create Lead", "lead");
+      $("integration-health").innerHTML = (d.integrations.items || []).map((item) => line("N", item.provider_type, item.stub_mode ? "Local or test mode" : "Configured", badge(item.valid ? "ready" : "missing"))).join("");
+      $("pipeline-overview").innerHTML = ["New", "Estimate", "Proposal", "Negotiation", "Won", "Completed"].map((lane) => `<div class="lane"><h3>${lane}</h3><div class="mini-card"><strong>${lane === "New" ? d.leads.total : lane === "Proposal" ? d.proposals.total : lane === "Won" ? d.jobs.total : lane === "Completed" ? d.metrics.completed_jobs : d.estimates.total}</strong><span>${lane === "New" ? "lead intake" : lane.toLowerCase()} stage</span></div></div>`).join("");
+    }
+    function renderActiveJobCards(records) {
+      const cards = records.slice(0, 4).map((record, index) => {
+        const item = artifact(record);
+        const progress = Math.min(95, Math.max(12, 28 + index * 17));
+        return `<div class="job-card"><div class="card-top"><span>${esc(item.title || item.job_id)}</span>${badge(item.status || "planned")}</div><strong>${esc(item.customer_id || item.project_id || "Customer")}</strong><div class="progress"><span style="width:${progress}%"></span></div><div class="job-meta"><span>Progress ${progress}%</span><span>Budget ${money(item.budget || item.total || 0)}</span><span>Spent ${money(item.costs || 0)}</span><span>Crew ${index + 1}</span><span>Due ${esc(item.end_date || "TBD")}</span><span>Priority ${index === 0 ? "High" : "Normal"}</span></div></div>`;
+      }).join("");
+      $("active-jobs").innerHTML = cards || onboarding("Start Your First Project", ["Create a customer", "Build an estimate", "Send a proposal", "Accept proposal", "Project appears here automatically"], "Create Lead", "lead");
+    }
+    function renderRows(id, records, row, cols, empty) {
+      const rows = (records || []).map((record) => `<tr>${row(artifact(record), record)}</tr>`).join("");
+      $(id).innerHTML = rows || `<tr><td colspan="${cols}" class="empty">${empty}</td></tr>`;
+    }
+    function renderLeads(data) {
+      const items = data.items || [];
+      $("lead-kanban").innerHTML = ["new", "contacted", "proposal_sent", "won"].map((status) => `<div class="lane"><h3>${status.replaceAll("_"," ")}</h3>${items.filter((r) => (artifact(r).status || "new") === status).map((r) => { const item = artifact(r); return `<div class="mini-card"><strong>${esc(item.name || item.lead_id)}</strong><span>${esc(item.project_type || "Project")}</span></div>`; }).join("") || `<div class="empty">No leads in this stage</div>`}</div>`).join("");
+      renderRows("leads-table", items, (item) => `<td>${esc(item.name || item.lead_id)}</td><td>${badge(item.status || "new")}</td><td>${esc(String(item.project_type || "-").replaceAll("_"," "))}</td><td>${item.customer_id ? "Converted" : "Follow up"}</td>`, 4, "No leads match these filters.");
+      $("lead-summary").innerHTML = line("L", "Unconverted leads", `${items.filter((r) => !artifact(r).customer_id).length} need follow-up`);
+    }
+    function renderCustomers(data) {
+      renderRows("customers-table", data.items, (item) => `<td>${esc(item.name || item.customer_id)}</td><td>${esc(item.email || "-")}<br>${esc(item.phone || "")}</td><td>${esc(item.address || "-")}</td><td>${badge("active")}</td>`, 4, "No customers match these filters.");
+      const first = artifact((data.items || [])[0]);
+      $("customer-profile").innerHTML = first.customer_id ? [line("C", first.name, first.email || "No email"), line("D", "Documents", "Files and proposals attach to this profile"), line("N", "Notes", "Communication history appears here")].join("") : `<div class="empty">Select or create a customer.</div>`;
+    }
+    function renderEstimates(data) {
+      renderRows("estimates-table", data.items, (item, record) => `<td>${esc(item.estimate_id || item.project_id)}</td><td>${badge(record.status || item.status || "draft")}</td><td>${money(item.total || item.grand_total)}</td><td>${pct(item.margin_percentage || 0)}</td>`, 4, "No estimates yet.");
+      $("estimate-builder").innerHTML = [line("M", "Materials", "Line items and material cost inputs"), line("L", "Labor", "Crew and rate assumptions"), line("%", "Margin preview", "Tax and profit margin update before proposal")].join("");
+    }
+    function renderProposals(data) {
+      renderRows("proposals-table", data.items, (item, record) => `<td>${esc(item.proposal_id)}</td><td>${badge(record.status || item.status || "draft")}</td><td>${esc(item.customer?.name || item.customer?.customer_id || "-")}</td><td>${money(item.estimate?.total)}</td><td><button class="btn subtle" data-pdf="${esc(item.proposal_id)}">PDF</button></td>`, 5, "No proposals yet.");
+    }
+    function renderJobs(data) {
+      const items = data.items || [];
+      $("job-board").innerHTML = ["planned","active","on_hold","completed"].map((status) => `<div class="lane"><h3>${status.replaceAll("_"," ")}</h3>${items.filter((r) => (artifact(r).status || "planned") === status).map((r) => { const item = artifact(r); return `<div class="mini-card"><strong>${esc(item.title || item.job_id)}</strong><span>${esc(item.project_id || "")}</span></div>`; }).join("") || `<div class="empty">No jobs</div>`}</div>`).join("");
+      renderRows("jobs-table", items, (item) => `<td>${esc(item.title || item.job_id)}</td><td>${badge(item.status)}</td><td>${esc(item.project_id || "-")}</td><td>${esc(item.customer_id || "-")}</td>`, 4, "No jobs match these filters.");
+      const first = artifact(items[0]);
+      $("job-details").innerHTML = first.job_id ? [line("T", "Status timeline", first.status || "planned"), line("C", "Costs", "Use job costs and invoices to track margin"), line("P", "Customer portal", "Preview customer-safe job status")].join("") : `<div class="empty">Select a job from the board.</div>`;
+    }
+    function renderSchedule(data) {
+      $("calendar-list").innerHTML = (data.items || []).map((record) => { const item = artifact(record); return line("S", item.title || item.start_date || "Schedule item", `${item.job_id || "Job"} ${item.status || ""}`, badge(item.status || "planned")); }).join("") || `<div class="empty">No schedule items yet.</div>`;
+      $("calendar-sync").innerHTML = [line("G", "Google Calendar", "OAuth-ready test mode", badge("test mode")), line("O", "Outlook Calendar", "OAuth-ready test mode", badge("test mode"))].join("");
+    }
+    function renderInvoices(data) {
+      renderRows("invoices-table", data.items, (item) => `<td>${esc(item.invoice_id)}</td><td>${esc(item.job_id || "-")}</td><td>${money(item.total)}</td><td>${money(item.outstanding_balance)}</td><td><button class="btn subtle">PDF</button></td>`, 5, "No invoices yet.");
+    }
+    function renderPayments(data) {
+      renderRows("payments-table", data.items, (item) => `<td>${esc(item.payload?.invoice_id || "-")}</td><td>${badge(item.payload?.payment_status || item.status)}</td><td>${esc(item.payload?.provider_reference_id || "-")}</td><td>${esc(item.payload?.received_at || "-")}</td>`, 4, "No payment history yet.");
+      $("payment-analytics").innerHTML = [line("$", "Balance", "Outstanding receivables appear in dashboard KPIs"), line("F", "Failed payments", "Provider webhooks map failures into this table")].join("");
+    }
+    function renderFiles(data) {
+      renderRows("files-table", data.items, (item) => `<td>${esc(item.filename)}</td><td>${esc(item.entity_type)} / ${esc(item.entity_id)}</td><td>${esc(item.size_bytes)} bytes</td><td>${badge(item.status || "active")}</td>`, 4, "No files uploaded yet.");
+    }
+    function renderIntegrations(data) {
+      const logos = {payment: "$", calendar: "G", notification: "M", sms: "T", email: "S"};
+      $("integration-cards").innerHTML = (data.items || []).map((item) => `<div class="card integration-card"><div class="integration-icon">${esc(logos[item.provider_type] || item.provider_type?.slice(0,1).toUpperCase())}</div><div class="card-top"><span>${esc(item.provider_type)}</span>${badge(item.valid ? "connected" : "not connected")}</div><strong>${esc(item.provider)}</strong><span class="trend ${item.stub_mode ? "warn" : ""}">${item.stub_mode ? "Test Mode" : "Live Mode"} · Last sync local</span><p class="panel-sub">${esc(item.setup_instructions || "Configure provider credentials.")}</p><div class="toolbar"><button class="btn subtle">Configure</button><button class="btn validate-integration" data-provider-type="${esc(item.provider_type)}">Validate</button></div></div>`).join("");
+    }
+    function renderSettings(account) {
+      const tabs = ["Company","Branding","Users","Roles","Notifications","Billing","API Keys","Security"];
+      $("settings-tabs").innerHTML = tabs.map((tab, i) => `<button class="tab ${i === 0 ? "active" : ""}">${tab}</button>`).join("");
+      $("settings-panels").innerHTML = tabs.map((tab) => `<div class="card"><div class="card-top"><span>${tab}</span>${badge(tab === "Security" ? "ready" : "draft")}</div><strong>${tab}</strong><p class="panel-sub">${tab === "Users" ? `Current role: ${esc(account.role || "viewer")}` : "Configuration workspace for SaaS operators."}</p></div>`).join("");
+    }
+    function renderReadiness(data) {
+      const checks = data.checks || [];
+      const ready = checks.length ? Math.round(checks.filter((check) => check.status === "ready").length / checks.length * 100) : 0;
+      $("readiness-list").innerHTML = `<div class="panel readiness-hero"><div class="readiness-score" style="--ready:${ready}%"><strong>${ready}%</strong></div><h2>Production Ready</h2><p class="panel-sub">Database, storage, auth, integrations, deployment, and operating controls.</p></div>` + checks.map((check) => line(check.status === "ready" ? "✓" : "!", check.label, check.detail, badge(check.status))).join("");
+      $("missing-capabilities").innerHTML = (data.missing_production_capabilities || []).map((item) => line("!", item, "Required before production launch")).join("");
+    }
+    function renderAnalytics(metrics) {
+      $("analytics-kpis").innerHTML = [["Estimated", metrics.estimated_revenue],["Invoiced", metrics.invoiced_revenue],["Paid", metrics.paid_revenue],["Costs", metrics.total_costs]].map(([label, value]) => `<div class="card"><div class="card-top"><span>${label}</span></div><strong>${money(value)}</strong></div>`).join("");
+      $("analytics-chart").innerHTML = $("revenue-chart").innerHTML;
+    }
+    async function createRecord() {
+      const type = $("new-type").value;
+      const name = $("new-name").value || "New record";
+      const amount = Number($("new-amount").value || 0);
+      try {
+        if (type === "lead") await api("/renovation/leads", {method: "POST", body: JSON.stringify({name, email: $("new-email").value, project_type: "kitchen_remodel", description: $("new-notes").value, created_date: new Date().toISOString().slice(0,10), source: {source_type: "cockpit"}})});
+        if (type === "customer") await api("/renovation/customers", {method: "POST", body: JSON.stringify({name, email: $("new-email").value})});
+        if (type === "estimate") await api("/renovation/estimates", {method: "POST", body: JSON.stringify({project_id: `project-${Date.now()}`, scope_description: $("new-notes").value || name, rooms: [{name: "Project", length_ft: 10, width_ft: 10, quantity: 1}], quantities: {}, labor_rate: 65, contingency_percentage: 10, tax_percentage: 0})});
+        if (!["lead", "customer", "estimate"].includes(type)) throw new Error("Open the related workspace to finish this workflow with the required linked record.");
+        $("new-dialog").close();
+        $("status").textContent = `${type} created.`;
+        await load();
+      } catch (err) { $("error").textContent = err.message; }
+    }
+    $("connect").addEventListener("click", connect);
+    $("collapse-sidebar").addEventListener("click", () => document.querySelector(".app").classList.toggle("collapsed"));
+    $("new-button").addEventListener("click", () => $("new-dialog").showModal());
+    $("close-dialog").addEventListener("click", () => $("new-dialog").close());
+    $("create-record").addEventListener("click", createRecord);
+    document.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-nav-target],[data-new-type],[data-refresh],[data-pdf]");
+      if (!target) return;
+      if (target.dataset.navTarget) show(target.dataset.navTarget);
+      if (target.dataset.newType) { $("new-type").value = target.dataset.newType; $("new-dialog").showModal(); }
+      if (target.dataset.refresh) load();
+      if (target.dataset.pdf) window.open(`/renovation/proposals/${target.dataset.pdf}/pdf`, "_blank");
+    });
+    $("global-search").addEventListener("input", () => {
+      const q = $("global-search").value.toLowerCase();
+      document.querySelectorAll("tbody tr").forEach((row) => row.style.display = row.textContent.toLowerCase().includes(q) ? "" : "none");
+    });
+    renderNav();
+    show("dashboard");
+    if (state.token) load(); else connect();
   </script>
 </body>
 </html>"""
